@@ -57,9 +57,10 @@ install_if_missing(bioc_pkgs, function(pkgs) {
   )
 })
 
-if (!requireNamespace("GENESPACE", quietly = TRUE)) {
-  remotes::install_github("jtlovell/GENESPACE@1.3.1", upgrade = "never")
-}
+remotes::install_github(
+  "jtlovell/GENESPACE@7561036be821e333c1dfb52461ccec7222e95582",
+  upgrade = "never"
+)
 
 cat("GENESPACE version:", as.character(utils::packageVersion("GENESPACE")), "\n")
 cat("BiocVersion:", as.character(utils::packageVersion("BiocVersion")), "\n")
