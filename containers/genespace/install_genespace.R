@@ -35,15 +35,26 @@ install_if_missing <- function(pkgs, install_fun) {
 }
 
 install_if_missing(cran_pkgs, function(pkgs) {
-  install.packages(pkgs, repos = cran_repo, Ncpus = max(1, parallel::detectCores() - 1))
+  install.packages(
+    pkgs,
+    repos = cran_repo,
+    Ncpus = max(1, parallel::detectCores() - 1)
+  )
 })
 
 if (!requireNamespace("BiocManager", quietly = TRUE)) {
   install.packages("BiocManager", repos = cran_repo)
 }
 
+BiocManager::install(version = "3.21", ask = FALSE)
+
 install_if_missing(bioc_pkgs, function(pkgs) {
-  BiocManager::install(pkgs, ask = FALSE, update = FALSE, Ncpus = max(1, parallel::detectCores() - 1))
+  BiocManager::install(
+    pkgs,
+    ask = FALSE,
+    update = FALSE,
+    Ncpus = max(1, parallel::detectCores() - 1)
+  )
 })
 
 if (!requireNamespace("GENESPACE", quietly = TRUE)) {
@@ -51,3 +62,4 @@ if (!requireNamespace("GENESPACE", quietly = TRUE)) {
 }
 
 cat("GENESPACE version:", as.character(utils::packageVersion("GENESPACE")), "\n")
+cat("BiocVersion:", as.character(utils::packageVersion("BiocVersion")), "\n")
