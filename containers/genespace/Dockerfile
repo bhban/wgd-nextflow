@@ -7,22 +7,13 @@ COPY install_genespace.R /tmp/install_genespace.R
 RUN conda create -y -n genespace --override-channels \
     -c conda-forge -c bioconda \
     python=3.11 \
-    r-base=4.5.1 \
+    r-base=4.5 \
     orthofinder=2.5.5 \
     mcscanx=1.0.0 \
-    pandas=3.0.1 \
+    pandas \
     bioconductor-biostrings \
     bioconductor-rtracklayer \
     r-remotes \
-    r-igraph \
-    libcurl \
-    libxml2 \
-    zlib \
-    bzip2 \
-    xz \
-    openssl \
-    htslib \
-    curl \
     && conda clean --all --yes
 
 RUN conda run -n genespace Rscript /tmp/install_genespace.R && \
