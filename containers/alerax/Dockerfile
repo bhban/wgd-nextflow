@@ -15,6 +15,8 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     libgomp1 \
     libstdc++6 \
+    openmpi-bin \
+    libopenmpi-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt
