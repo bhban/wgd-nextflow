@@ -14,20 +14,17 @@ RUN apt-get update && apt-get install -y \
     make \
     pkg-config \
     libgomp1 \
+    libstdc++6 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt
 
-RUN git clone --recursive https://github.com/BenoitMorel/AleRax.git /opt/AleRax \
-    && cd /opt/AleRax \
+RUN git clone --recursive https://github.com/BenoitMorel/AleRax.git \
+    && cd AleRax \
     && git checkout 775d91d14c06d14ba5afcc855f58bd1ab520c48c \
     && git submodule update --init --recursive \
     && ./install.sh
 
-WORKDIR /opt/AleRax
-
-RUN ./install.sh
-
-RUN cp build/bin/alerax /usr/local/bin/alerax
+ENV PATH="/opt/AleRax/build/bin:${PATH}"
 
 WORKDIR /work
