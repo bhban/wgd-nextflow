@@ -9,7 +9,7 @@ RUN conda create -y -n macse --override-channels \
     pandas=3.0.1 \
     && conda clean --all --yes
 
-ENV PATH=/opt/conda/envs/iqtree/bin:/opt/conda/bin:$PATH
+ENV PATH=/opt/conda/envs/macse/bin:/opt/conda/bin:$PATH
 ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
 
