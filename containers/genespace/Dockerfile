@@ -11,10 +11,22 @@ RUN conda create -y -n genespace --override-channels \
     orthofinder=2.5.5 \
     mcscanx=1.0.0 \
     pandas=3.0.1 \
+    bioconductor-biostrings \
+    bioconductor-rtracklayer \
+    r-remotes \
+    r-igraph \
+    libcurl \
+    libxml2 \
+    zlib \
+    bzip2 \
+    xz \
+    openssl \
+    htslib \
+    curl \
     && conda clean --all --yes
 
-RUN conda run -n genespace Rscript /tmp/install_genespace.R \
-    && rm -f /tmp/install_genespace.R
+RUN conda run -n genespace Rscript /tmp/install_genespace.R && \
+    rm -f /tmp/install_genespace.R
 
 ENV PATH=/opt/conda/envs/genespace/bin:/opt/conda/bin:$PATH
 ENV LC_ALL=C.UTF-8
