@@ -1,18 +1,22 @@
 cran_repo <- "https://cloud.r-project.org"
+options(repos = c(CRAN = cran_repo))
 
-# Install BiocManager before installing GENESPACE
-install.packages("BiocManager", repos = cran_repo)
-BiocManager::install(version = "3.21", ask = FALSE)
+# Install required Bioconductor packages if not successfully installed by conda
+if (!requireNamespace("Biostrings", quietly = TRUE)) {
+  stop("Biostrings is not installed in the conda environment.")
+}
 
-# Install required BiocManager packages
-BiocManager::install(
-  c("Biostrings", "rtracklayer"),
-  ask = FALSE,
-  update = FALSE
+if (!requireNamespace("rtracklayer", quietly = TRUE)) {
+  stop("rtracklayer is not installed in the conda environment.")
+}
+
+# Install remotes to install GENESPACE from github
+if (!requireNamespace("remotes", quietly = TRUE)) {
+  install.packages("remotes")
+}
+
+remotes::install_github(
+  "jtlovell/GENESPACE@7561036be821e333c1dfb52461ccec7222e95582",
+  upgrade = "never",
+  dependencies = TRUE
 )
-
-# Need devtools to install GENESPACE. Must install remotes first
-install.packages("remotes", repos = cran_repo)
-install.packages("devtools", repos = cran_repo)
-
-devtools::install_github("jtlovell/GENESPACE@7561036be821e333c1dfb52461ccec7222e95582", upgrade = 'never')
