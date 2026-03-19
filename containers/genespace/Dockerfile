@@ -3,6 +3,7 @@ FROM continuumio/miniconda3:24.7.1-0
 USER root
 
 COPY install_genespace.R /tmp/install_genespace.R
+COPY ofInBlk_engine_patched.R /tmp/ofInBlk_engine_patched.R
 
 RUN conda create -y -n genespace --override-channels \
     -c conda-forge -c bioconda \
@@ -15,11 +16,15 @@ RUN conda create -y -n genespace --override-channels \
     bioconductor-rtracklayer \
     r-remotes \
     r-igraph \
+    r-yaml \
+    r-optparse \
+    r-dplyr \
+    r-readr \
     xz \
     && conda clean --all --yes
 
 RUN conda run -n genespace Rscript /tmp/install_genespace.R && \
-    rm -f /tmp/install_genespace.R
+    rm -f /tmp/install_genespace.R /tmp/ofInBlk_engine_patched.R
 
 ENV PATH=/opt/conda/envs/genespace/bin:/opt/conda/bin:$PATH
 ENV LC_ALL=C.UTF-8
