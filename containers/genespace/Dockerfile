@@ -14,6 +14,8 @@ RUN conda create -y -n genespace --override-channels \
     bioconductor-biostrings \
     bioconductor-rtracklayer \
     r-remotes \
+    r-igraph \
+    xz \
     && conda clean --all --yes
 
 RUN conda run -n genespace Rscript /tmp/install_genespace.R && \
