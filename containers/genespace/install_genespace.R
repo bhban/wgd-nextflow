@@ -42,24 +42,28 @@ append_collate_entry <- function(description_file, new_file) {
 verify_patch <- function() {
   library(GENESPACE)
 
+  if (!exists("ofInBlk_engine", envir = asNamespace("GENESPACE"))) {
+    stop("ofInBlk_engine function not found in GENESPACE namespace.", call. = FALSE)
+  }
+
   fn <- get("ofInBlk_engine", envir = asNamespace("GENESPACE"))
   fn_text <- paste(deparse(fn), collapse = "\n")
 
-  required_snippets <- c(
-    "sb01md <- sb01[, list(n = (uid1[1] + uid2[1])/2), by = \"rid\"]",
-    "propPass <- sum(sb01md$n[sb01md$n >= 40])/sum(sb01md$n)"
+  forbidden_snippets <- c(
+    "if (targetGenome == queryGenome)",
+    "bl00 <- data.table(bl01)",
+    "bl11 <- data.table(bl10)"
   )
 
-  missing <- required_snippets[
-    !vapply(required_snippets, grepl, logical(1), x = fn_text, fixed = TRUE)
+  present_forbidden <- forbidden_snippets[
+    vapply(forbidden_snippets, grepl, logical(1), x = fn_text, fixed = TRUE)
   ]
 
-  if (length(missing) > 0) {
+  if (length(present_forbidden) > 0) {
     stop(
       paste(
-        "Installed GENESPACE does not appear to contain the patched ofInBlk_engine.",
-        "Missing expected snippet(s):",
-        paste(missing, collapse = "\n")
+        "Installed GENESPACE contains code that should have been removed by the patch:",
+        paste(present_forbidden, collapse = "\n")
       ),
       call. = FALSE
     )
