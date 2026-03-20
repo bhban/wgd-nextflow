@@ -1,5 +1,5 @@
-ofInBlk_engine_patched <- function (gsParam, genome1, genome2, overwrite)
-  {
+ofInBlk_engine <- function (gsParam, genome1, genome2, overwrite) 
+{
     query <- target <- ofID1 <- ofID2 <- blkID <- rid <- uid1 <- uid2 <- regID <- ofID1 <- ofID2 <- sameHog <- hog1 <- hog2 <- sameInblkOG <- hasSelf <- isSyntenic <- noAnchor <- isArrayRep1 <- isArrayRep2 <- NULL
     blNames <- c("ofID1", "ofID2", "pid", "length", "mismatches", 
         "gapopenings", "queryStart", "queryEnd", "subjectStart", 
@@ -65,16 +65,22 @@ ofInBlk_engine_patched <- function (gsParam, genome1, genome2, overwrite)
     bl01 <- sb01[, blNames, with = F]
     bl10 <- sb01[, blNamesR, with = F]
     setnames(bl10, blNames)
-    p0md <- subset(md, query == target & query == queryGenome)
-    p1md <- subset(md, query == target & query == targetGenome)
-    bl00 <- fread(p0md$allBlast, showProgress = F, na.strings = c("NA", 
-        ""), select = blNames[1:12])
-    bl00[, `:=`(ofID1 = sprintf("%s_g1", ofID1), ofID2 = sprintf("%s_g1", 
-        ofID2))]
-    bl11 <- fread(p1md$allBlast, showProgress = F, na.strings = c("NA", 
-        ""), select = blNames[1:12])
-    bl11[, `:=`(ofID1 = sprintf("%s_g2", ofID1), ofID2 = sprintf("%s_g2", 
-        ofID2))]
+    #if (targetGenome == queryGenome) {
+    #    bl00 <- data.table(bl01)
+    #    bl11 <- data.table(bl10)
+    #}
+    #else {
+        p0md <- subset(md, query == target & query == queryGenome)
+        p1md <- subset(md, query == target & query == targetGenome)
+        bl00 <- fread(p0md$allBlast, showProgress = F, na.strings = c("NA", 
+            ""), select = blNames[1:12])
+        bl00[, `:=`(ofID1 = sprintf("%s_g1", ofID1), ofID2 = sprintf("%s_g1", 
+            ofID2))]
+        bl11 <- fread(p1md$allBlast, showProgress = F, na.strings = c("NA", 
+            ""), select = blNames[1:12])
+        bl11[, `:=`(ofID1 = sprintf("%s_g2", ofID1), ofID2 = sprintf("%s_g2", 
+            ofID2))]
+    #}
     tmpDir <- gsParam$paths$tmp
     if (dir.exists(tmpDir)) 
         unlink(tmpDir, recursive = T)
