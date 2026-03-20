@@ -22,6 +22,7 @@ RUN conda install -y -n annevo \
     torchvision==0.16.0 \
     torchaudio==2.1.0 \
     pytorch-cuda=12.1 \
+    mkl=2024.0.0 \
     && conda clean --all --yes
 
 RUN /opt/conda/bin/conda run -n annevo pip install --no-cache-dir -r requirements.txt
