@@ -1,34 +1,24 @@
 FROM continuumio/miniconda3:24.7.1-0
 
-USER root
+LABEL software="ANNEVO"
 
-WORKDIR /opt
+USER root
 
 RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
+WORKDIR /opt
+
+# clone repo
 RUN git clone https://github.com/xjtu-omics/ANNEVO.git
 
 WORKDIR /opt/ANNEVO
 
-RUN conda create -y -n annevo \
-    python=3.10 \
+# create environment from YAML
+RUN conda env create -f ANNEVO.yml -n annevo \
     && conda clean --all --yes
-
-RUN conda install -y -n annevo \
-    -c pytorch -c nvidia \
-    pytorch==2.1.0 \
-    torchvision==0.16.0 \
-    torchaudio==2.1.0 \
-    pytorch-cuda=12.1 \
-    mkl=2024.0.0 \
-    && conda clean --all --yes
-
-RUN /opt/conda/bin/conda run -n annevo pip install --no-cache-dir -r requirements.txt
 
 ENV PATH=/opt/conda/envs/annevo/bin:/opt/conda/bin:$PATH
-ENV LC_ALL=C.UTF-8
-ENV LANG=C.UTF-8
 
 WORKDIR /work
