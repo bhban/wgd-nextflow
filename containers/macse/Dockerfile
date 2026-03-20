@@ -1,5 +1,8 @@
 FROM continuumio/miniconda3:24.7.1-0
 
+LABEL software="MACSE" \
+      org.opencontainers.image.source="https://github.com/bhban/wgd-nextflow"
+
 USER root
 
 RUN conda create -y -n macse --override-channels \
