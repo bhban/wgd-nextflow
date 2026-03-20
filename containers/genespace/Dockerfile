@@ -1,5 +1,9 @@
 FROM continuumio/miniconda3:24.7.1-0
 
+LABEL software="GENESPACE" \
+      git_commit="7561036be821e333c1dfb52461ccec7222e95582" \
+      org.opencontainers.image.source="https://github.com/bhban/wgd-nextflow"
+
 USER root
 
 COPY install_genespace.R /tmp/install_genespace.R
