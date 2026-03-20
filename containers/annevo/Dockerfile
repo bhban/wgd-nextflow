@@ -1,6 +1,7 @@
 FROM continuumio/miniconda3:24.7.1-0
 
-LABEL software="ANNEVO"
+LABEL software="ANNEVO" \
+      git_commit="b07cb8e344e4c49165c8f818d9bf7708a495240b"
 
 USER root
 
@@ -11,7 +12,9 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /opt
 
 # clone repo
-RUN git clone https://github.com/xjtu-omics/ANNEVO.git
+RUN git clone https://github.com/xjtu-omics/ANNEVO.git \
+    && cd ANNEVO \
+    && git checkout b07cb8e344e4c49165c8f818d9bf7708a495240b
 
 WORKDIR /opt/ANNEVO
 
