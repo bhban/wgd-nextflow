@@ -1,5 +1,8 @@
 FROM continuumio/miniconda3:24.7.1-0
 
+LABEL software="IQ-TREE" \
+      org.opencontainers.image.source="https://github.com/bhban/wgd-nextflow"
+      
 USER root
 
 RUN conda create -y -n iqtree --override-channels \
