@@ -13,70 +13,36 @@ check_pkg <- function(pkg) {
   }
 }
 
-strip_strings_and_comments <- function(x) {
-  x <- gsub('"([^"\\\\]|\\\\.)*"', '""', x, perl = TRUE)
-  x <- gsub("'([^'\\\\]|\\\\.)*'", "''", x, perl = TRUE)
-  x <- sub("#.*$", "", x, perl = TRUE)
-  x
-}
+append_collate_entry <- function(description_file, new_file) {
+  desc <- readLines(description_file, warn = FALSE)
 
-find_function_bounds <- function(lines, fun_name) {
-  start_idx <- grep(sprintf("^\\s*%s\\s*<-\\s*function\\b", fun_name), lines)
-  if (length(start_idx) != 1) {
-    stop(sprintf("Expected exactly one definition of %s, found %d.", fun_name, length(start_idx)))
+  collate_idx <- grep("^Collate:", desc)
+  if (length(collate_idx) == 0) {
+    return(invisible(FALSE))
   }
 
-  brace_depth <- 0L
-  saw_open <- FALSE
-  end_idx <- NA_integer_
+  start <- collate_idx[1]
+  end <- start
 
-  for (i in seq.int(start_idx, length(lines))) {
-    line_clean <- strip_strings_and_comments(lines[i])
-    chars <- strsplit(line_clean, "", fixed = TRUE)[[1]]
-
-    for (ch in chars) {
-      if (ch == "{") {
-        brace_depth <- brace_depth + 1L
-        saw_open <- TRUE
-      } else if (ch == "}") {
-        brace_depth <- brace_depth - 1L
-      }
-
-      if (saw_open && brace_depth == 0L) {
-        end_idx <- i
-        break
-      }
-    }
-
-    if (!is.na(end_idx)) {
-      break
-    }
+  while (end < length(desc) && grepl("^[[:space:]]", desc[end + 1])) {
+    end <- end + 1
   }
 
-  if (is.na(end_idx)) {
-    stop(sprintf("Could not determine end of %s function.", fun_name))
+  collate_block <- desc[start:end]
+
+  if (any(grepl(sprintf("'%s'", new_file), collate_block, fixed = TRUE))) {
+    return(invisible(TRUE))
   }
 
-  list(start = start_idx, end = end_idx)
-}
-
-patch_function_in_file <- function(filepath, fun_name, replacement_lines) {
-  lines <- readLines(filepath, warn = FALSE)
-  bounds <- find_function_bounds(lines, fun_name)
-
-  new_lines <- c(
-    lines[seq_len(bounds$start - 1L)],
-    replacement_lines,
-    lines[seq(bounds$end + 1L, length(lines))]
-  )
-
-  writeLines(new_lines, filepath, useBytes = TRUE)
+  desc[end] <- paste0(desc[end], sprintf("\n        '%s'", new_file))
+  writeLines(desc, description_file, useBytes = TRUE)
+  invisible(TRUE)
 }
 
 verify_patch <- function() {
   library(GENESPACE)
 
-  fn <- getFromNamespace("ofInBlk_engine", "GENESPACE")
+  fn <- get("ofInBlk_engine", envir = asNamespace("GENESPACE"))
   fn_text <- paste(deparse(fn), collapse = "\n")
 
   required_snippets <- c(
@@ -84,7 +50,10 @@ verify_patch <- function() {
     "propPass <- sum(sb01md$n[sb01md$n >= 40])/sum(sb01md$n)"
   )
 
-  missing <- required_snippets[!vapply(required_snippets, grepl, logical(1), x = fn_text, fixed = TRUE)]
+  missing <- required_snippets[
+    !vapply(required_snippets, grepl, logical(1), x = fn_text, fixed = TRUE)
+  ]
+
   if (length(missing) > 0) {
     stop(
       paste(
@@ -103,13 +72,16 @@ check_pkg("Biostrings")
 check_pkg("rtracklayer")
 check_pkg("remotes")
 check_pkg("igraph")
+check_pkg("yaml")
+check_pkg("optparse")
+check_pkg("dplyr")
+check_pkg("readr")
 
 tmp_dir <- tempfile("genespace_src_")
 dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
 
 tarball_path <- file.path(tmp_dir, "GENESPACE.tar.gz")
 download.file(github_tarball, destfile = tarball_path, mode = "wb", quiet = FALSE)
-
 utils::untar(tarball_path, exdir = tmp_dir)
 
 src_dirs <- list.dirs(tmp_dir, recursive = FALSE, full.names = TRUE)
@@ -124,32 +96,15 @@ if (!file.exists(patch_file)) {
   stop("Patch file /tmp/ofInBlk_engine_patched.R was not found.", call. = FALSE)
 }
 
-patch_lines <- readLines(patch_file, warn = FALSE)
+target_patch_name <- "zz_ofInBlk_engine_patch.R"
+target_patch_path <- file.path(src_dir, "R", target_patch_name)
 
-r_files <- list.files(file.path(src_dir, "R"), pattern = "\\.[Rr]$", full.names = TRUE)
-matching_files <- r_files[
-  vapply(
-    r_files,
-    function(f) any(grepl("^\\s*ofInBlk_engine\\s*<-\\s*function\\b", readLines(f, warn = FALSE))),
-    logical(1)
-  )
-]
+file.copy(patch_file, target_patch_path, overwrite = TRUE)
 
-if (length(matching_files) != 1) {
-  stop(
-    sprintf(
-      "Expected exactly one source file containing ofInBlk_engine, found %d.",
-      length(matching_files)
-    ),
-    call. = FALSE
-  )
+description_file <- file.path(src_dir, "DESCRIPTION")
+if (file.exists(description_file)) {
+  append_collate_entry(description_file, target_patch_name)
 }
-
-patch_function_in_file(
-  filepath = matching_files,
-  fun_name = "ofInBlk_engine",
-  replacement_lines = patch_lines
-)
 
 remotes::install_local(
   path = src_dir,
@@ -159,5 +114,4 @@ remotes::install_local(
 )
 
 verify_patch()
-
 cat("GENESPACE installed successfully with patched ofInBlk_engine\n")
