@@ -2,7 +2,7 @@ FROM ubuntu:24.04
 
 LABEL software="AleRax" \
       version="1.4.1" \
-      git_commit="775d91d14c06d14ba5afcc855f58bd1ab520c48c"
+      git_commit="775d91d14c06d14ba5afcc855f58bd1ab520c48c" \
       org.opencontainers.image.source="https://github.com/bhban/wgd-nextflow"
 
 ENV DEBIAN_FRONTEND=noninteractive
