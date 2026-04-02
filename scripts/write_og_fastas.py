@@ -170,7 +170,7 @@ def main():
         cds_cache[genome_id] = (genome_source, idx, first_fields)
         return cds_cache[genome_id]
 
-    ogs = sorted(ppass[col_og].astype(str).unique().tolist())
+    ogs = sorted(ppass[col_og].astype(str).unique().tolist(), key=int)
     with open(args.og_list, "w") as f:
         for og in ogs:
             f.write(f"{og}\n")
