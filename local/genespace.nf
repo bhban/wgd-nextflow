@@ -1,13 +1,11 @@
-process PARSE_ANNOTATIONS {
-    tag "parse_annotations"
+process STAGE_GENOMEREPO {
+    tag "stage_genomerepo"
 
     input:
     path finalized_files
-    path genomes_tsv
 
     output:
-    path("genespace/${params.working_dir}")
-    path("genespace/${params.working_dir}/parse_annotations.done")
+    path("genespace/genomeRepo")
 
     script:
     def stageLines = finalized_files.collect { f ->
@@ -23,23 +21,42 @@ process PARSE_ANNOTATIONS {
         }
         if (name.endsWith('.chr.tsv')) {
             def genome = name.replaceFirst(/\.chr\.tsv$/, '')
-            return "cp ${f} genespace/genomeRepo/chr_dict/${genome}.tsv"
+            return "mkdir -p genespace/genomeRepo/chr_dict\ncp ${f} genespace/genomeRepo/chr_dict/${genome}.tsv"
         }
 
         return null
     }.findAll { it != null }.join('\n')
 
     """
-    mkdir -p genespace/genomeRepo/chr_dict
-    mkdir -p genespace/${params.working_dir}
+    rm -rf genespace/genomeRepo
+    mkdir -p genespace/genomeRepo
 
     ${stageLines}
+
+    test -d genespace/genomeRepo
+    """
+}
+
+process PARSE_ANNOTATIONS_BY_SOURCE {
+    tag "parse_annotations_by_source"
+
+    input:
+    path genomeRepo
+    path genomes_tsv
+
+    output:
+    path("genespace/${params.working_dir}")
+    path("genespace/${params.working_dir}/parse_annotations.done")
+
+    script:
+    """
+    mkdir -p genespace/${params.working_dir}
 
     Rscript --vanilla scripts/run_parse_annotations_by_source.R \
       --genomes-tsv ${genomes_tsv} \
       --raw-genomerepo genespace/genomeRepo \
       --genespace-wd genespace/${params.working_dir} \
-      > parse_annotations.log 2>&1
+      > parse_annotations_by_source.log 2>&1
 
     touch genespace/${params.working_dir}/parse_annotations.done
     """
