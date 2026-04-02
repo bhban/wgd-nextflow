@@ -1,7 +1,7 @@
 nextflow.enable.dsl=2
 
 include { PRIMARY_TRANSCRIPT; FINALIZE_REPO_IDS } from './modules/local/prep'
-include { PARSE_ANNOTATIONS; VALIDATE_PARSE_OUTPUTS; ORTHOFINDER_OR_SKIP; RUN_GENESPACE } from './modules/local/genespace'
+include { STAGE_GENOMEREPO; PARSE_ANNOTATIONS_BY_SOURCE; VALIDATE_PARSE_OUTPUTS; ORTHOFINDER_OR_SKIP; RUN_GENESPACE } from './modules/local/genespace'
 include { PANGENES_PASS_FILTER; WRITE_OG_FASTAS; MACSE_ALIGN_OG; MACSE_REPORT; IQTREE_OG; IQTREE_REPORT; WRITE_ALERAX_MAPPING; WRITE_ALERAX_FAMILIES; RUN_ALERAX } from './modules/local/post_genespace'
 
 def resolveChrDict(genome) {
@@ -60,13 +60,14 @@ workflow {
     species_tree_ch = Channel.value(file(params.alerax.species_tree))
     cds_files_ch    = Channel.fromPath("${params.cds_dir}/*.cds").collect()
 
-    primary_out   = PRIMARY_TRANSCRIPT(genomes_ch)
-    finalized_out = FINALIZE_REPO_IDS(primary_out)
+    primary_out    = PRIMARY_TRANSCRIPT(genomes_ch)
+    finalized_out  = FINALIZE_REPO_IDS(primary_out)
 
-    parse_out       = PARSE_ANNOTATIONS(finalized_out.collect(), genomes_tsv_ch)
-    validate_out    = VALIDATE_PARSE_OUTPUTS(parse_out)
-    orthofinder_out = ORTHOFINDER_OR_SKIP(validate_out, genomes_tsv_ch)
-    genespace_out   = RUN_GENESPACE(validate_out, orthofinder_out, genomes_tsv_ch)
+    staged_repo_out = STAGE_GENOMEREPO(finalized_out.collect())
+    parsed_out      = PARSE_ANNOTATIONS_BY_SOURCE(staged_repo_out, genomes_tsv_ch)
+    validated_out   = VALIDATE_PARSE_OUTPUTS(parsed_out)
+    orthofinder_out = ORTHOFINDER_OR_SKIP(validated_out, genomes_tsv_ch)
+    genespace_out   = RUN_GENESPACE(validated_out, orthofinder_out, genomes_tsv_ch)
 
     pass_out      = PANGENES_PASS_FILTER(genespace_out)
     og_fastas_out = WRITE_OG_FASTAS(pass_out[0], pass_out[1], genomes_tsv_ch, cds_files_ch)
