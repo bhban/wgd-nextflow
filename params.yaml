@@ -1,0 +1,35 @@
+genomes_tsv: "genomes.tsv"
+
+working_dir: "workingDir"
+postdir: "post_genespace"
+
+gff_dir: "gff"
+protein_dir: "protein"
+cds_dir: "cds"
+chr_dict_dir: "chr_dict"
+
+ext:
+  gff: "gff3"
+  pep: "pep"
+
+config_for_r: "config.yaml"
+
+orthofinder_bin: "orthofinder"
+macse_bin: "macse"
+iqtree_bin: "iqtree3"
+alerax_bin: "alerax"
+
+force_orthofinder: false
+array_size: 10000
+
+containers:
+  genespace: "ghcr.io/bhban/genespace:1.0"
+  macse: "ghcr.io/bhban/macse:1.0"
+  iqtree: "ghcr.io/bhban/iqtree:1.0"
+  alerax: "ghcr.io/bhban/alerax:1.0"
+
+alerax:
+  species_tree: "snakemake/species_tree.nwk"
+  rec_model: "UndatedDL"
+  model_parametrization: "PER-SPECIES"
+  gene_tree_samples: 100
