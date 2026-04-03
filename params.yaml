@@ -28,6 +28,12 @@ containers:
   iqtree: "ghcr.io/bhban/iqtree:1.0"
   alerax: "ghcr.io/bhban/alerax:1.0"
 
+sif_paths:
+  genespace: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/genespace_1.0.sif"
+  macse: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/macse_1.0.sif"
+  iqtree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/iqtree_1.0.sif"
+  alerax: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/alerax_1.0.sif"
+
 alerax:
   species_tree: "snakemake/species_tree.nwk"
   rec_model: "UndatedDL"
