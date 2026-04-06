@@ -13,7 +13,7 @@ process PANGENES_PASS_FILTER {
     """
     mkdir -p ${params.postdir}
 
-    python scripts/pangenes_pass_filter.py \
+    python ${projectDir}/scripts/pangenes_pass_filter.py \
       --genespace-wd genespace/${params.working_dir} \
       --out-tsv ${params.postdir}/pangenes_PASS.tsv \
       --out-og-list ${params.postdir}/og_list_min4species.txt \
