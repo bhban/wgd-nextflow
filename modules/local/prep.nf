@@ -44,11 +44,9 @@ process FINALIZE_REPO_IDS {
     script:
     """
     cp ${chr} ${genome}.chr.tsv
-    cp ${gff} ${genome}.gff3
-    cp ${primary_pep} ${genome}.pep
 
     python ${projectDir}/scripts/apply_chr_dict_to_gff.py \
-      --in-gff ${genome}.gff3 \
+      --in-gff ${gff} \
       --out-gff ${genome}.chr.gff3 \
       --chr-dict ${genome}.chr.tsv \
       > ${genome}.chrify.log 2>&1
@@ -57,7 +55,7 @@ process FINALIZE_REPO_IDS {
       --source ${source} \
       --in-gff ${genome}.chr.gff3 \
       --out-gff ${genome}.final.gff3 \
-      --in-pep ${genome}.pep \
+      --in-pep ${primary_pep} \
       --out-pep ${genome}.final.pep \
       > ${genome}.finalize.log 2>&1
 
