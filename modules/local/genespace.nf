@@ -52,7 +52,7 @@ process PARSE_ANNOTATIONS_BY_SOURCE {
     """
     mkdir -p genespace/${params.working_dir}
 
-    Rscript --vanilla scripts/run_parse_annotations_by_source.R \
+    Rscript --vanilla ${projectDir}/scripts/run_parse_annotations_by_source.R \
       --genomes-tsv ${genomes_tsv} \
       --raw-genomerepo genespace/genomeRepo \
       --genespace-wd genespace/${params.working_dir} \
