@@ -54,7 +54,7 @@ process PARSE_ANNOTATIONS_BY_SOURCE {
 
     Rscript --vanilla ${projectDir}/scripts/run_parse_annotations_by_source.R \
       --genomes-tsv ${genomes_tsv} \
-      --raw-genomerepo genespace/genomeRepo \
+      --raw-genomerepo ${genomeRepo} \
       --genespace-wd genespace/${params.working_dir} \
       > parse_annotations_by_source.log 2>&1
 
