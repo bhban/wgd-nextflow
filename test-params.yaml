@@ -1,0 +1,33 @@
+genomes_tsv: "/exports/eddie/scratch/s2428892/ericales-wgd-nextflow/testdata/genomes.tsv"
+
+working_dir: "workingDir_test"
+postdir: "post_genespace_test"
+
+gff_dir: "/exports/eddie/scratch/s2428892/ericales-wgd-nextflow/testdata/gff_truncated"
+protein_dir: "/exports/eddie/scratch/s2428892/ericales-wgd-nextflow/testdata/protein"
+cds_dir: "/exports/eddie/scratch/s2428892/ericales-wgd-nextflow/testdata/cds"
+chr_dict_dir: "/exports/eddie/scratch/s2428892/ericales-wgd-nextflow/testdata/chr_dict"
+
+ext:
+  gff: "gff3"
+  pep: "pep"
+
+orthofinder_bin: "orthofinder"
+macse_bin: "macse"
+iqtree_bin: "iqtree3"
+alerax_bin: "alerax"
+
+force_orthofinder: false
+array_size: 10000
+
+sif_paths:
+  genespace: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/genespace_1.0.sif"
+  macse: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/macse_1.0.sif"
+  iqtree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/iqtree_1.0.sif"
+  alerax: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/alerax_1.0.sif"
+
+alerax:
+  species_tree: "species_tree.nwk"
+  rec_model: "UndatedDL"
+  model_parametrization: "PER-SPECIES"
+  gene_tree_samples: 10
