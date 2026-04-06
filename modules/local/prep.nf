@@ -13,15 +13,18 @@ process PRIMARY_TRANSCRIPT {
           python ${projectDir}/scripts/primary_transcript.py ${pep} \
             --mode phytozome \
             --phytozome-gff ${gff} \
-            > ${genome}.primary.pep 2> ${genome}.log
+            > ${genome}.log 2>&1
           """
         : """
           python ${projectDir}/scripts/primary_transcript.py ${pep} \
-            > ${genome}.primary.pep 2> ${genome}.log
+            > ${genome}.log 2>&1
           """
 
     """
     ${cmd}
+
+    test -s primary_transcripts/${pep.getName()}
+    cp primary_transcripts/${pep.getName()} ${genome}.primary.pep
     test -s ${genome}.primary.pep
     """
 }
