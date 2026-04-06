@@ -10,13 +10,13 @@ process PRIMARY_TRANSCRIPT {
     script:
     def cmd = source == 'phytozome'
         ? """
-          python scripts/primary_transcript.py ${pep} \
+          python ${projectDir}/scripts/primary_transcript.py ${pep} \
             --mode phytozome \
             --phytozome-gff ${gff} \
             > ${genome}.primary.pep 2> ${genome}.log
           """
         : """
-          python scripts/primary_transcript.py ${pep} \
+          python ${projectDir}/scripts/primary_transcript.py ${pep} \
             > ${genome}.primary.pep 2> ${genome}.log
           """
 
@@ -44,13 +44,13 @@ process FINALIZE_REPO_IDS {
     cp ${gff} ${genome}.gff3
     cp ${primary_pep} ${genome}.pep
 
-    python scripts/apply_chr_dict_to_gff.py \
+    python ${projectDir}/scripts/apply_chr_dict_to_gff.py \
       --in-gff ${genome}.gff3 \
       --out-gff ${genome}.chr.gff3 \
       --chr-dict ${genome}.chr.tsv \
       > ${genome}.chrify.log 2>&1
 
-    python scripts/finalize_repo_ids.py \
+    python ${projectDir}/scripts/finalize_repo_ids.py \
       --source ${source} \
       --in-gff ${genome}.chr.gff3 \
       --out-gff ${genome}.final.gff3 \
