@@ -27,7 +27,7 @@ sif_paths:
   alerax: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/alerax_1.0.sif"
 
 alerax:
-  species_tree: "species_tree.nwk"
+  species_tree: "/exports/eddie/scratch/s2428892/ericales-wgd-nextflow/testdata/species_tree.nwk"
   rec_model: "UndatedDL"
   model_parametrization: "PER-SPECIES"
   gene_tree_samples: 10
