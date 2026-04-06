@@ -44,7 +44,7 @@ process WRITE_OG_FASTAS {
     mkdir -p cds
     cp ${cds_files.join(' ')} cds/
 
-    python scripts/write_og_fastas.py \
+    python ${projectDir}/scripts/write_og_fastas.py \
       --pangenes-pass ${pass_tsv} \
       --genomes-tsv ${genomes_tsv} \
       --cds-dir cds \
