@@ -82,7 +82,7 @@ process VALIDATE_PARSE_OUTPUTS {
         .join(' ')
 
     """
-    python scripts/validate_parse_outputs.py \
+    python ${projectDir}/scripts/validate_parse_outputs.py \
       --genespace-wd genespace/${params.working_dir} \
       --genomes ${genomes} \
       > validate_parse_outputs.log 2>&1
@@ -114,7 +114,7 @@ process ORTHOFINDER_OR_SKIP {
     """
     mkdir -p genespace/orthofinder
 
-    python scripts/orthofinder_or_skip.py \
+    python ${projectDir}/scripts/orthofinder_or_skip.py \
       --threads ${task.cpus} \
       --peptide-dir genespace/${params.working_dir}/peptide \
       --orthofinder-dir genespace/orthofinder \
@@ -143,7 +143,7 @@ process RUN_GENESPACE {
 
     script:
     """
-    Rscript --vanilla scripts/run_genespace.R \
+    Rscript --vanilla ${projectDir}/scripts/run_genespace.R \
       --config ${params.config_for_r ?: 'config.yaml'} \
       --genespace-wd genespace/${params.working_dir} \
       --orthofinder-dir genespace/orthofinder \
