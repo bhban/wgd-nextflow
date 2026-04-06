@@ -60,10 +60,17 @@ workflow {
     species_tree_ch = Channel.value(file(params.alerax.species_tree))
     cds_files_ch    = Channel.fromPath("${params.cds_dir}/*.cds").collect()
 
-    primary_out    = PRIMARY_TRANSCRIPT(genomes_ch)
-    finalized_out  = FINALIZE_REPO_IDS(primary_out)
+    primary_out   = PRIMARY_TRANSCRIPT(genomes_ch)
+    finalized_out = FINALIZE_REPO_IDS(primary_out)
 
-    staged_repo_out = STAGE_GENOMEREPO(finalized_out.collect())
+    staged_repo_out = STAGE_GENOMEREPO(
+        finalized_out
+            .flatMap { genome, source, ploidy, gff, pep, chr ->
+                [gff, pep, chr]
+            }
+            .collect()
+    )
+
     parsed_out      = PARSE_ANNOTATIONS_BY_SOURCE(staged_repo_out, genomes_tsv_ch)
     validated_out   = VALIDATE_PARSE_OUTPUTS(parsed_out)
     orthofinder_out = ORTHOFINDER_OR_SKIP(validated_out, genomes_tsv_ch)
@@ -72,14 +79,18 @@ workflow {
     pass_out      = PANGENES_PASS_FILTER(genespace_out)
     og_fastas_out = WRITE_OG_FASTAS(pass_out[0], pass_out[1], genomes_tsv_ch, cds_files_ch)
 
-    og_fasta_ch = Channel
-        .fromPath("${params.postdir}/og_fasta/og_*.fasta")
-        .map { fasta ->
-            def m = (fasta.baseName =~ /^og_(.+)$/)
-            if (!m) {
-                throw new IllegalArgumentException("Could not parse OG from filename: ${fasta}")
-            }
-            tuple(m[0][1], fasta)
+    og_fasta_ch = og_fastas_out[0]
+        .flatMap { og_dir ->
+            og_dir.listFiles()
+                .findAll { it.name ==~ /og_.+\.fasta/ }
+                .sort { a, b -> a.name <=> b.name }
+                .collect { fasta ->
+                    def m = (fasta.baseName =~ /^og_(.+)$/)
+                    if (!m) {
+                        throw new IllegalArgumentException("Could not parse OG from filename: ${fasta}")
+                    }
+                    tuple(m[0][1], fasta)
+                }
         }
 
     macse_out        = MACSE_ALIGN_OG(og_fasta_ch)
