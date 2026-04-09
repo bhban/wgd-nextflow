@@ -25,31 +25,6 @@ cfg <- yaml::read_yaml(opt$config)
 gs  <- cfg$genespace
 
 # ----------------------------
-# Patch GENESPACE ofInBlk_engine
-# ----------------------------
-patch_file <- gs$ofInBlk_engine_patch
-if (is.null(patch_file) || patch_file == "") {
-  stop("config.yaml must set genespace.ofInBlk_engine_patch to the patched R file path")
-}
-if (!file.exists(patch_file)) {
-  stop(paste0("Patch file not found: ", patch_file))
-}
-
-source(patch_file)
-
-if (!exists("ofInBlk_engine_patched")) {
-  stop("Patch file did not define ofInBlk_engine_patched")
-}
-
-ns <- asNamespace("GENESPACE")
-environment(ofInBlk_engine_patched) <- ns
-unlockBinding("ofInBlk_engine", ns)
-assign("ofInBlk_engine", ofInBlk_engine_patched, envir = ns)
-lockBinding("ofInBlk_engine", ns)
-
-message("Patched GENESPACE::ofInBlk_engine using: ", patch_file)
-
-# ----------------------------
 # OrthoFinder directory
 # ----------------------------
 rawOrthofinderDir <- gs$rawOrthofinderDir
