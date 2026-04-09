@@ -70,6 +70,8 @@ workflow {
     pangenes_pass_filter_script_ch   = Channel.value(file('scripts/pangenes_pass_filter.py'))
     write_og_fastas_script_ch        = Channel.value(file('scripts/write_og_fastas.py'))
 
+    genome_ids_ch = Channel.value(genomes_rows.collect { it.genome })
+
     primary_out = PRIMARY_TRANSCRIPT(
         genomes_ch,
         primary_transcript_script_ch
@@ -94,18 +96,19 @@ workflow {
         genomes_tsv_ch,
         parse_annotations_script_ch
     )
-
+    
     validated_out = VALIDATE_PARSE_OUTPUTS(
         parsed_out,
-        validate_parse_outputs_script_ch
+        validate_parse_outputs_script_ch,
+        genome_ids_ch
     )
-
+    
     orthofinder_out = ORTHOFINDER_OR_SKIP(
         validated_out,
-        genomes_tsv_ch,
+        genome_ids_ch,
         orthofinder_or_skip_script_ch
     )
-
+    
     genespace_out = RUN_GENESPACE(
         validated_out,
         orthofinder_out,
