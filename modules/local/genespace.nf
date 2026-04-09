@@ -127,8 +127,7 @@ process RUN_GENESPACE {
     input:
     path genespace_wd
     path parse_ok
-    path orthofinder_dir
-    path orthofinder_done
+    val orthofinder_dir_arg
     path genomes_tsv
     path run_genespace_script
 
@@ -137,11 +136,13 @@ process RUN_GENESPACE {
     path("genespace.done")
 
     script:
+    def of_arg = orthofinder_dir_arg ? "--orthofinder-dir ${orthofinder_dir_arg}" : ""
+
     """
     Rscript --vanilla ${run_genespace_script} \
       --config ${params.config_for_r ?: 'config.yaml'} \
       --genespace-wd ${genespace_wd} \
-      --orthofinder-dir ${orthofinder_dir} \
+      ${of_arg} \
       --genomes-tsv ${genomes_tsv} \
       > genespace.log 2>&1
 
