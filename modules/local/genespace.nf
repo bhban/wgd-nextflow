@@ -37,6 +37,32 @@ process STAGE_GENOMEREPO {
     """
 }
 
+process PARSE_ANNOTATIONS_BY_SOURCE {
+    tag "parse_annotations_by_source"
+
+    input:
+    path genomeRepo
+    path genomes_tsv
+    path parse_annotations_script
+
+    output:
+    path("genespace/${params.working_dir}")
+    path("genespace/${params.working_dir}/parse_annotations.done")
+
+    script:
+    """
+    mkdir -p genespace/${params.working_dir}
+
+    Rscript --vanilla ${parse_annotations_script} \
+      --genomes-tsv ${genomes_tsv} \
+      --raw-genomerepo ${genomeRepo} \
+      --genespace-wd genespace/${params.working_dir} \
+      > parse_annotations_by_source.log 2>&1
+
+    touch genespace/${params.working_dir}/parse_annotations.done
+    """
+}
+
 process VALIDATE_PARSE_OUTPUTS {
     tag "validate_parse_outputs"
 
@@ -64,36 +90,6 @@ process VALIDATE_PARSE_OUTPUTS {
       > validate_parse_outputs.log 2>&1
 
     touch parse_outputs.ok
-    """
-}
-
-process VALIDATE_PARSE_OUTPUTS {
-    tag "validate_parse_outputs"
-
-    input:
-    path genespace_wd
-    path parse_done
-    path validate_parse_outputs_script
-
-    output:
-    path("genespace/${params.working_dir}")
-    path("genespace/${params.working_dir}/parse_outputs.ok")
-
-    script:
-    def genomes = file(params.genomes_tsv)
-        .readLines()
-        .drop(1)
-        .findAll { it.trim() }
-        .collect { it.split('\t', -1)[0].trim() }
-        .join(' ')
-
-    """
-    python ${validate_parse_outputs_script} \
-      --genespace-wd genespace/${params.working_dir} \
-      --genomes ${genomes} \
-      > validate_parse_outputs.log 2>&1
-
-    touch genespace/${params.working_dir}/parse_outputs.ok
     """
 }
 
