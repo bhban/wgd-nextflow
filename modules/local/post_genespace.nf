@@ -4,6 +4,7 @@ process PANGENES_PASS_FILTER {
     input:
     path genespace_wd
     path genespace_done
+    path pangenes_pass_filter_script
 
     output:
     path("${params.postdir}/pangenes_PASS.tsv")
@@ -13,7 +14,7 @@ process PANGENES_PASS_FILTER {
     """
     mkdir -p ${params.postdir}
 
-    python ${projectDir}/scripts/pangenes_pass_filter.py \
+    python ${pangenes_pass_filter_script} \
       --genespace-wd genespace/${params.working_dir} \
       --out-tsv ${params.postdir}/pangenes_PASS.tsv \
       --out-og-list ${params.postdir}/og_list_min4species.txt \
@@ -32,6 +33,7 @@ process WRITE_OG_FASTAS {
     path og_list
     path genomes_tsv
     path cds_files
+    path write_og_fastas_script
 
     output:
     path("${params.postdir}/og_fasta")
@@ -44,7 +46,7 @@ process WRITE_OG_FASTAS {
     mkdir -p cds
     cp ${cds_files.join(' ')} cds/
 
-    python ${projectDir}/scripts/write_og_fastas.py \
+    python ${write_og_fastas_script} \
       --pangenes-pass ${pass_tsv} \
       --genomes-tsv ${genomes_tsv} \
       --cds-dir cds \
