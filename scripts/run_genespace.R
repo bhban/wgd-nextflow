@@ -7,14 +7,15 @@ suppressPackageStartupMessages({
 })
 
 option_list <- list(
-  make_option("--config", type="character"),
-  make_option("--genespace-wd", type="character"),
-  make_option("--orthofinder-dir", type="character"),
-  make_option("--genomes-tsv", type="character")
+  make_option("--config", type = "character"),
+  make_option("--genespace-wd", type = "character"),
+  make_option("--orthofinder-dir", type = "character", default = NULL),
+  make_option("--genomes-tsv", type = "character")
 )
+
 opt <- parse_args(OptionParser(option_list = option_list))
 
-need <- c("config", "genespace-wd", "orthofinder-dir", "genomes-tsv")
+need <- c("config", "genespace-wd", "genomes-tsv")
 missing <- need[vapply(need, function(x) is.null(opt[[x]]) || opt[[x]] == "", logical(1))]
 if (length(missing) > 0) {
   stop("Missing required option(s): ", paste0("--", missing, collapse = ", "))
@@ -52,14 +53,14 @@ message("Patched GENESPACE::ofInBlk_engine using: ", patch_file)
 # OrthoFinder directory
 # ----------------------------
 rawOrthofinderDir <- gs$rawOrthofinderDir
+cli_orthofinder_dir <- opt$`orthofinder-dir`
 
-if (is.null(rawOrthofinderDir) || rawOrthofinderDir == "") {
-
-  results_txt <- file.path(opt$`orthofinder-dir`, "results_dir.txt")
+if (!is.null(cli_orthofinder_dir) && cli_orthofinder_dir != "") {
+  results_txt <- file.path(cli_orthofinder_dir, "results_dir.txt")
 
   if (!file.exists(results_txt)) {
     stop(paste0(
-      "genespace.rawOrthofinderDir is blank, but results_dir.txt not found: ",
+      "--orthofinder-dir was provided, but results_dir.txt was not found: ",
       results_txt,
       "\nThis should be created by orthofinder_or_skip.py"
     ))
@@ -75,9 +76,24 @@ if (is.null(rawOrthofinderDir) || rawOrthofinderDir == "") {
   if (!dir.exists(rawOrthofinderDir)) {
     stop(paste0("Results dir from results_dir.txt does not exist: ", rawOrthofinderDir))
   }
+
+  message("Using OrthoFinder results derived from --orthofinder-dir: ", cli_orthofinder_dir)
+} else {
+  if (is.null(rawOrthofinderDir) || rawOrthofinderDir == "") {
+    stop(paste0(
+      "No OrthoFinder directory available.\n",
+      "Either provide --orthofinder-dir or set genespace.rawOrthofinderDir in config.yaml."
+    ))
+  }
+
+  if (!dir.exists(rawOrthofinderDir)) {
+    stop(paste0("genespace.rawOrthofinderDir does not exist: ", rawOrthofinderDir))
+  }
+
+  message("Using OrthoFinder results from genespace.rawOrthofinderDir in config.yaml")
 }
 
-                       # ----------------------------
+# ----------------------------
 # Genomes TSV (genomeIDs + ploidy)
 # ----------------------------
 genomes_tsv <- opt$`genomes-tsv`
@@ -113,21 +129,28 @@ if (any(is.na(genomes_df$ploidy))) {
 genomeIDs <- genomes_df$genome_id
 ploidy <- genomes_df$ploidy
 names(ploidy) <- genomeIDs
-                       
+
 # ----------------------------
 # Parameters
 # ----------------------------
 blkSize <- as.integer(gs$blkSize)
-if (is.na(blkSize)) stop("genespace.blkSize must be an integer")
+if (is.na(blkSize)) {
+  stop("genespace.blkSize must be an integer")
+}
 
-# Optional paths (allow empty -> GENESPACE defaults)
 path2mcscanx <- gs$path2mcscanx
 path2orthofinder <- gs$path2orthofinder
 path2diamond <- gs$path2diamond
 
-if (is.null(path2mcscanx) || path2mcscanx == "") stop("genespace.path2mcscanx not set in config.yaml")
-if (is.null(path2orthofinder) || path2orthofinder == "") stop("genespace.path2orthofinder not set in config.yaml")
-if (is.null(path2diamond) || path2diamond == "") stop("genespace.path2diamond not set in config.yaml")
+if (is.null(path2mcscanx) || path2mcscanx == "") {
+  stop("genespace.path2mcscanx not set in config.yaml")
+}
+if (is.null(path2orthofinder) || path2orthofinder == "") {
+  stop("genespace.path2orthofinder not set in config.yaml")
+}
+if (is.null(path2diamond) || path2diamond == "") {
+  stop("genespace.path2diamond not set in config.yaml")
+}
 
 message("Using wd = ", opt$`genespace-wd`)
 message("Using rawOrthofinderDir = ", rawOrthofinderDir)
