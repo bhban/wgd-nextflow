@@ -60,8 +60,26 @@ workflow {
     species_tree_ch = Channel.value(file(params.alerax.species_tree))
     cds_files_ch    = Channel.fromPath("${params.cds_dir}/*.cds").collect()
 
-    primary_out   = PRIMARY_TRANSCRIPT(genomes_ch)
-    finalized_out = FINALIZE_REPO_IDS(primary_out)
+    primary_transcript_script_ch     = Channel.value(file('scripts/primary_transcript.py'))
+    apply_chr_dict_script_ch         = Channel.value(file('scripts/apply_chr_dict_to_gff.py'))
+    finalize_repo_ids_script_ch      = Channel.value(file('scripts/finalize_repo_ids.py'))
+    parse_annotations_script_ch      = Channel.value(file('scripts/run_parse_annotations_by_source.R'))
+    validate_parse_outputs_script_ch = Channel.value(file('scripts/validate_parse_outputs.py'))
+    orthofinder_or_skip_script_ch    = Channel.value(file('scripts/orthofinder_or_skip.py'))
+    run_genespace_script_ch          = Channel.value(file('scripts/run_genespace.R'))
+    pangenes_pass_filter_script_ch   = Channel.value(file('scripts/pangenes_pass_filter.py'))
+    write_og_fastas_script_ch        = Channel.value(file('scripts/write_og_fastas.py'))
+
+    primary_out = PRIMARY_TRANSCRIPT(
+        genomes_ch,
+        primary_transcript_script_ch
+    )
+
+    finalized_out = FINALIZE_REPO_IDS(
+        primary_out,
+        apply_chr_dict_script_ch,
+        finalize_repo_ids_script_ch
+    )
 
     staged_repo_out = STAGE_GENOMEREPO(
         finalized_out
@@ -71,13 +89,42 @@ workflow {
             .collect()
     )
 
-    parsed_out      = PARSE_ANNOTATIONS_BY_SOURCE(staged_repo_out, genomes_tsv_ch)
-    validated_out   = VALIDATE_PARSE_OUTPUTS(parsed_out)
-    orthofinder_out = ORTHOFINDER_OR_SKIP(validated_out, genomes_tsv_ch)
-    genespace_out   = RUN_GENESPACE(validated_out, orthofinder_out, genomes_tsv_ch)
+    parsed_out = PARSE_ANNOTATIONS_BY_SOURCE(
+        staged_repo_out,
+        genomes_tsv_ch,
+        parse_annotations_script_ch
+    )
 
-    pass_out      = PANGENES_PASS_FILTER(genespace_out)
-    og_fastas_out = WRITE_OG_FASTAS(pass_out[0], pass_out[1], genomes_tsv_ch, cds_files_ch)
+    validated_out = VALIDATE_PARSE_OUTPUTS(
+        parsed_out,
+        validate_parse_outputs_script_ch
+    )
+
+    orthofinder_out = ORTHOFINDER_OR_SKIP(
+        validated_out,
+        genomes_tsv_ch,
+        orthofinder_or_skip_script_ch
+    )
+
+    genespace_out = RUN_GENESPACE(
+        validated_out,
+        orthofinder_out,
+        genomes_tsv_ch,
+        run_genespace_script_ch
+    )
+
+    pass_out = PANGENES_PASS_FILTER(
+        genespace_out,
+        pangenes_pass_filter_script_ch
+    )
+
+    og_fastas_out = WRITE_OG_FASTAS(
+        pass_out[0],
+        pass_out[1],
+        genomes_tsv_ch,
+        cds_files_ch,
+        write_og_fastas_script_ch
+    )
 
     og_fasta_ch = og_fastas_out[0]
         .flatMap { og_dir ->
