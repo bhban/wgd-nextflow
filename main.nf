@@ -96,22 +96,30 @@ workflow {
         genomes_tsv_ch,
         parse_annotations_script_ch
     )
-    
+
     validated_out = VALIDATE_PARSE_OUTPUTS(
         parsed_out,
         validate_parse_outputs_script_ch,
         genome_ids_ch
     )
-    
-    orthofinder_out = ORTHOFINDER_OR_SKIP(
-        validated_out,
-        genome_ids_ch,
-        orthofinder_or_skip_script_ch
-    )
-    
+
+    def orthofinder_dir_arg
+    def orthofinder_out = null
+
+    if (params.run_external_orthofinder) {
+        orthofinder_out = ORTHOFINDER_OR_SKIP(
+            validated_out,
+            genome_ids_ch,
+            orthofinder_or_skip_script_ch
+        )
+        orthofinder_dir_arg = orthofinder_out[0]
+    } else {
+        orthofinder_dir_arg = params.orthofinder_dir_override ? params.orthofinder_dir_override : ''
+    }
+
     genespace_out = RUN_GENESPACE(
         validated_out,
-        orthofinder_out,
+        orthofinder_dir_arg,
         genomes_tsv_ch,
         run_genespace_script_ch
     )
