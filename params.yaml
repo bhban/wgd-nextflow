@@ -20,6 +20,8 @@ iqtree_bin: "iqtree3"
 alerax_bin: "alerax"
 
 force_orthofinder: false
+run_external_orthofinder: false
+orthofinder_dir_override: ""
 array_size: 10000
 
 containers:
