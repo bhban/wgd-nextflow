@@ -43,6 +43,7 @@ process PARSE_ANNOTATIONS_BY_SOURCE {
     input:
     path genomeRepo
     path genomes_tsv
+    path parse_annotations_script
 
     output:
     path("genespace/${params.working_dir}")
@@ -52,7 +53,7 @@ process PARSE_ANNOTATIONS_BY_SOURCE {
     """
     mkdir -p genespace/${params.working_dir}
 
-    Rscript --vanilla ${projectDir}/scripts/run_parse_annotations_by_source.R \
+    Rscript --vanilla ${parse_annotations_script} \
       --genomes-tsv ${genomes_tsv} \
       --raw-genomerepo ${genomeRepo} \
       --genespace-wd genespace/${params.working_dir} \
@@ -68,6 +69,7 @@ process VALIDATE_PARSE_OUTPUTS {
     input:
     path genespace_wd
     path parse_done
+    path validate_parse_outputs_script
 
     output:
     path("genespace/${params.working_dir}")
@@ -82,7 +84,7 @@ process VALIDATE_PARSE_OUTPUTS {
         .join(' ')
 
     """
-    python ${projectDir}/scripts/validate_parse_outputs.py \
+    python ${validate_parse_outputs_script} \
       --genespace-wd genespace/${params.working_dir} \
       --genomes ${genomes} \
       > validate_parse_outputs.log 2>&1
@@ -98,6 +100,7 @@ process ORTHOFINDER_OR_SKIP {
     path genespace_wd
     path parse_ok
     path genomes_tsv
+    path orthofinder_or_skip_script
 
     output:
     path("genespace/orthofinder")
@@ -114,7 +117,7 @@ process ORTHOFINDER_OR_SKIP {
     """
     mkdir -p genespace/orthofinder
 
-    python ${projectDir}/scripts/orthofinder_or_skip.py \
+    python ${orthofinder_or_skip_script} \
       --threads ${task.cpus} \
       --peptide-dir genespace/${params.working_dir}/peptide \
       --orthofinder-dir genespace/orthofinder \
@@ -136,6 +139,7 @@ process RUN_GENESPACE {
     path orthofinder_dir
     path orthofinder_done
     path genomes_tsv
+    path run_genespace_script
 
     output:
     path("genespace/${params.working_dir}")
@@ -143,7 +147,7 @@ process RUN_GENESPACE {
 
     script:
     """
-    Rscript --vanilla ${projectDir}/scripts/run_genespace.R \
+    Rscript --vanilla ${run_genespace_script} \
       --config ${params.config_for_r ?: 'config.yaml'} \
       --genespace-wd genespace/${params.working_dir} \
       --orthofinder-dir genespace/orthofinder \
