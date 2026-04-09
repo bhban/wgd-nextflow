@@ -3,6 +3,7 @@ process PRIMARY_TRANSCRIPT {
 
     input:
     tuple val(genome), val(source), val(ploidy), path(gff), path(pep), path(chr)
+    path primary_transcript_script
 
     output:
     tuple val(genome), val(source), val(ploidy), path("${genome}.primary.pep"), path(gff), path(chr)
@@ -10,13 +11,13 @@ process PRIMARY_TRANSCRIPT {
     script:
     def cmd = source == 'phytozome'
         ? """
-          python ${projectDir}/scripts/primary_transcript.py ${pep} \
+          python ${primary_transcript_script} ${pep} \
             --mode phytozome \
             --phytozome-gff ${gff} \
             > ${genome}.log 2>&1
           """
         : """
-          python ${projectDir}/scripts/primary_transcript.py ${pep} \
+          python ${primary_transcript_script} ${pep} \
             > ${genome}.log 2>&1
           """
 
@@ -34,6 +35,8 @@ process FINALIZE_REPO_IDS {
 
     input:
     tuple val(genome), val(source), val(ploidy), path(primary_pep), path(gff), path(chr)
+    path apply_chr_dict_script
+    path finalize_repo_ids_script
 
     output:
     tuple val(genome), val(source), val(ploidy),
@@ -45,13 +48,13 @@ process FINALIZE_REPO_IDS {
     """
     cp ${chr} ${genome}.chr.tsv
 
-    python ${projectDir}/scripts/apply_chr_dict_to_gff.py \
+    python ${apply_chr_dict_script} \
       --in-gff ${gff} \
       --out-gff ${genome}.chr.gff3 \
       --chr-dict ${genome}.chr.tsv \
       > ${genome}.chrify.log 2>&1
 
-    python ${projectDir}/scripts/finalize_repo_ids.py \
+    python ${finalize_repo_ids_script} \
       --source ${source} \
       --in-gff ${genome}.chr.gff3 \
       --out-gff ${genome}.final.gff3 \
