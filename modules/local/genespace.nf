@@ -106,7 +106,7 @@ process ORTHOFINDER_OR_SKIP {
     def genomes_arg = genomes.join(' ')
 
     """
-    mkdir -p orthofinder
+    rm -rf orthofinder
 
     python ${orthofinder_or_skip_script} \
       --threads ${task.cpus} \
