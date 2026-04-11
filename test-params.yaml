@@ -20,6 +20,8 @@ alerax_bin: "alerax"
 force_orthofinder: false
 run_external_orthofinder: false
 orthofinder_dir_override: ""
+orthofinder_analysis_threads: 2
+
 array_size: 10000
 
 sif_paths:
