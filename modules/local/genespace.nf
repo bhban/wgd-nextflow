@@ -153,7 +153,3 @@ process RUN_GENESPACE {
     touch genespace.done
     """
 }
-
-    touch genespace.done
-    """
-}
