@@ -11,6 +11,7 @@ def parse_args():
     ap.add_argument("--orthofinder-dir", required=True)
     ap.add_argument("--orthofinder-bin", required=True)
     ap.add_argument("--threads", type=int, required=True)
+    ap.add_argument("--analysis-threads", type=int, default=1)
     ap.add_argument("--genomes", nargs="+", required=True)
     ap.add_argument("--force", default="false")
     return ap.parse_args()
@@ -36,7 +37,7 @@ def find_results_dir(of_dir: Path):
     """
     OrthoFinder writes:
       <of_dir>/Results_<DATE>/
-    We must return the *full path* to that Results_* directory.
+    We must return the full path to that Results_* directory.
     """
     results = sorted([p for p in of_dir.glob("Results_*") if p.is_dir()])
     if not results:
@@ -68,6 +69,10 @@ def main():
         print(f"ERROR: peptide dir not found: {peptide_dir}", file=sys.stderr)
         sys.exit(2)
 
+    if args.analysis_threads < 1:
+        print("ERROR: --analysis-threads must be >= 1", file=sys.stderr)
+        sys.exit(2)
+
     expected = sorted(args.genomes)
 
     existing = read_species_set(of_dir)
@@ -79,15 +84,14 @@ def main():
         return
 
     print("Running OrthoFinder (new run or mismatched species set).")
-    # Ensure parent directory exists, but NOT the OrthoFinder output dir itself
     of_dir.parent.mkdir(parents=True, exist_ok=True)
-    
+
     cmd = [
         args.orthofinder_bin,
         "-f", str(peptide_dir),
         "-t", str(args.threads),
-        "-a", str(args.threads),
-        "-o", str(of_dir)
+        "-a", str(args.analysis_threads),
+        "-o", str(of_dir),
     ]
 
     print("Command:", " ".join(cmd))
