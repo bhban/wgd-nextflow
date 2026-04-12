@@ -2,32 +2,56 @@
 
 suppressPackageStartupMessages({
   library(optparse)
-  library(yaml)
   library(GENESPACE)
 })
 
 option_list <- list(
-  make_option("--config", type = "character"),
   make_option("--genespace-wd", type = "character"),
   make_option("--orthofinder-dir", type = "character", default = NULL),
-  make_option("--genomes-tsv", type = "character")
+  make_option("--genomes-tsv", type = "character"),
+  make_option("--raw-orthofinder-dir", type = "character", default = ""),
+  make_option("--blk-size", type = "integer"),
+  make_option("--orthofinder-in-blk", type = "character", default = "true")
 )
 
 opt <- parse_args(OptionParser(option_list = option_list))
 
-need <- c("config", "genespace-wd", "genomes-tsv")
+need <- c(
+  "genespace-wd",
+  "genomes-tsv",
+  "blk-size"
+)
+
 missing <- need[vapply(need, function(x) is.null(opt[[x]]) || opt[[x]] == "", logical(1))]
 if (length(missing) > 0) {
   stop("Missing required option(s): ", paste0("--", missing, collapse = ", "))
 }
 
-cfg <- yaml::read_yaml(opt$config)
-gs  <- cfg$genespace
+as_bool <- function(x) {
+  tolower(trimws(as.character(x))) %in% c("1", "true", "yes", "y")
+}
+
+# ----------------------------
+# Tool paths from container PATH
+# ----------------------------
+path2mcscanx <- Sys.which("MCScanX")
+path2orthofinder <- Sys.which("orthofinder")
+path2diamond <- Sys.which("diamond")
+
+if (path2mcscanx == "") {
+  stop("MCScanX not found on PATH inside container")
+}
+if (path2orthofinder == "") {
+  stop("orthofinder not found on PATH inside container")
+}
+if (path2diamond == "") {
+  stop("diamond not found on PATH inside container")
+}
 
 # ----------------------------
 # OrthoFinder directory
 # ----------------------------
-rawOrthofinderDir <- gs$rawOrthofinderDir
+rawOrthofinderDir <- opt$`raw-orthofinder-dir`
 cli_orthofinder_dir <- opt$`orthofinder-dir`
 
 if (!is.null(cli_orthofinder_dir) && cli_orthofinder_dir != "") {
@@ -57,24 +81,21 @@ if (!is.null(cli_orthofinder_dir) && cli_orthofinder_dir != "") {
   if (is.null(rawOrthofinderDir) || rawOrthofinderDir == "") {
     stop(paste0(
       "No OrthoFinder directory available.\n",
-      "Either provide --orthofinder-dir or set genespace.rawOrthofinderDir in config.yaml."
+      "Either provide --orthofinder-dir or set --raw-orthofinder-dir."
     ))
   }
 
   if (!dir.exists(rawOrthofinderDir)) {
-    stop(paste0("genespace.rawOrthofinderDir does not exist: ", rawOrthofinderDir))
+    stop(paste0("--raw-orthofinder-dir does not exist: ", rawOrthofinderDir))
   }
 
-  message("Using OrthoFinder results from genespace.rawOrthofinderDir in config.yaml")
+  message("Using OrthoFinder results from --raw-orthofinder-dir")
 }
 
 # ----------------------------
-# Genomes TSV (genomeIDs + ploidy)
+# Genomes TSV
 # ----------------------------
 genomes_tsv <- opt$`genomes-tsv`
-if (is.null(genomes_tsv) || genomes_tsv == "") {
-  stop("Missing required option: --genomes-tsv")
-}
 if (!file.exists(genomes_tsv)) {
   stop(paste0("genomes.tsv not found: ", genomes_tsv))
 }
@@ -108,33 +129,24 @@ names(ploidy) <- genomeIDs
 # ----------------------------
 # Parameters
 # ----------------------------
-blkSize <- as.integer(gs$blkSize)
+blkSize <- as.integer(opt$`blk-size`)
 if (is.na(blkSize)) {
-  stop("genespace.blkSize must be an integer")
+  stop("--blk-size must be an integer")
 }
 
-path2mcscanx <- gs$path2mcscanx
-path2orthofinder <- gs$path2orthofinder
-path2diamond <- gs$path2diamond
-
-if (is.null(path2mcscanx) || path2mcscanx == "") {
-  stop("genespace.path2mcscanx not set in config.yaml")
-}
-if (is.null(path2orthofinder) || path2orthofinder == "") {
-  stop("genespace.path2orthofinder not set in config.yaml")
-}
-if (is.null(path2diamond) || path2diamond == "") {
-  stop("genespace.path2diamond not set in config.yaml")
-}
+orthofinderInBlk <- as_bool(opt$`orthofinder-in-blk`)
 
 message("Using wd = ", opt$`genespace-wd`)
 message("Using rawOrthofinderDir = ", rawOrthofinderDir)
 message("Using blkSize = ", blkSize)
+message("Using MCScanX = ", path2mcscanx)
+message("Using orthofinder = ", path2orthofinder)
+message("Using diamond = ", path2diamond)
 
 gpar <- init_genespace(
   wd = opt$`genespace-wd`,
   rawOrthofinderDir = rawOrthofinderDir,
-  orthofinderInBlk = isTRUE(gs$orthofinder_in_blk),
+  orthofinderInBlk = orthofinderInBlk,
   genomeIDs = genomeIDs,
   ploidy = ploidy,
   blkSize = blkSize,
