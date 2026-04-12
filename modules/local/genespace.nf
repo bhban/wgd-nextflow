@@ -138,17 +138,21 @@ process RUN_GENESPACE {
 
     script:
     def of_arg = orthofinder_dir_arg ? "--orthofinder-dir ${orthofinder_dir_arg}" : ""
-    def raw_of_arg = params.genespace.rawOrthofinderDir ? "--raw-orthofinder-dir ${params.genespace.rawOrthofinderDir}" : "--raw-orthofinder-dir ''"
+    def raw_of_arg = params.genespace.rawOrthofinderDir ? "--raw-orthofinder-dir ${params.genespace.rawOrthofinderDir}" : ""
 
     """
     Rscript --vanilla ${run_genespace_script} \
       --genespace-wd ${genespace_wd} \
       ${of_arg} \
-      --genomes-tsv ${genomes_tsv} \
       ${raw_of_arg} \
+      --genomes-tsv ${genomes_tsv} \
       --blk-size ${params.genespace.blkSize} \
       --orthofinder-in-blk ${params.genespace.orthofinder_in_blk} \
       > genespace.log 2>&1
+
+    touch genespace.done
+    """
+}
 
     touch genespace.done
     """
