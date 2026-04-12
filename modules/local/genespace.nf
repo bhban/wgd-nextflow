@@ -110,6 +110,7 @@ process ORTHOFINDER_OR_SKIP {
 
     python ${orthofinder_or_skip_script} \
       --threads ${task.cpus} \
+      --analysis-threads ${params.orthofinder_analysis_threads} \
       --peptide-dir ${genespace_wd}/peptide \
       --orthofinder-dir orthofinder \
       --orthofinder-bin ${params.orthofinder_bin} \
