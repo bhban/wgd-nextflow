@@ -77,19 +77,18 @@ if (!is.null(cli_orthofinder_dir) && cli_orthofinder_dir != "") {
   }
 
   message("Using OrthoFinder results derived from --orthofinder-dir: ", cli_orthofinder_dir)
-} else {
-  if (is.null(rawOrthofinderDir) || rawOrthofinderDir == "") {
-    stop(paste0(
-      "No OrthoFinder directory available.\n",
-      "Either provide --orthofinder-dir or set --raw-orthofinder-dir."
-    ))
-  }
+
+} else if (!is.null(rawOrthofinderDir) && rawOrthofinderDir != "") {
 
   if (!dir.exists(rawOrthofinderDir)) {
     stop(paste0("--raw-orthofinder-dir does not exist: ", rawOrthofinderDir))
   }
 
   message("Using OrthoFinder results from --raw-orthofinder-dir")
+
+} else {
+  rawOrthofinderDir <- NULL
+  message("No OrthoFinder directory provided; proceeding without rawOrthofinderDir")
 }
 
 # ----------------------------
@@ -137,15 +136,13 @@ if (is.na(blkSize)) {
 orthofinderInBlk <- as_bool(opt$`orthofinder-in-blk`)
 
 message("Using wd = ", opt$`genespace-wd`)
-message("Using rawOrthofinderDir = ", rawOrthofinderDir)
 message("Using blkSize = ", blkSize)
 message("Using MCScanX = ", path2mcscanx)
 message("Using orthofinder = ", path2orthofinder)
 message("Using diamond = ", path2diamond)
 
-gpar <- init_genespace(
+gs_args <- list(
   wd = opt$`genespace-wd`,
-  rawOrthofinderDir = rawOrthofinderDir,
   orthofinderInBlk = orthofinderInBlk,
   genomeIDs = genomeIDs,
   ploidy = ploidy,
@@ -155,5 +152,12 @@ gpar <- init_genespace(
   path2diamond = path2diamond
 )
 
+if (!is.null(rawOrthofinderDir) && rawOrthofinderDir != "") {
+  gs_args$rawOrthofinderDir <- rawOrthofinderDir
+}
+
+gpar <- do.call(init_genespace, gs_args)
+
 out <- run_genespace(gpar, overwrite = TRUE)
 cat("GENESPACE complete\n")
+                       
