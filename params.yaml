@@ -12,8 +12,6 @@ ext:
   gff: "gff3"
   pep: "pep"
 
-config_for_r: "config.yaml"
-
 orthofinder_bin: "orthofinder"
 macse_bin: "macse"
 iqtree_bin: "iqtree3"
@@ -23,6 +21,17 @@ force_orthofinder: false
 run_external_orthofinder: false
 orthofinder_dir_override: ""
 orthofinder_analysis_threads: 2
+
+genespace:
+  rawOrthofinderDir: ""
+  blkSize: 5
+  orthofinder_in_blk: true
+
+alerax:
+  species_tree: "snakemake/species_tree.nwk"
+  rec_model: "UndatedDL"
+  model_parametrization: "PER-SPECIES"
+  gene_tree_samples: 100
 
 array_size: 10000
 
@@ -37,9 +46,3 @@ sif_paths:
   macse: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/macse_1.0.sif"
   iqtree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/iqtree_1.0.sif"
   alerax: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/alerax_1.0.sif"
-
-alerax:
-  species_tree: "snakemake/species_tree.nwk"
-  rec_model: "UndatedDL"
-  model_parametrization: "PER-SPECIES"
-  gene_tree_samples: 100
