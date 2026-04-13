@@ -36,7 +36,7 @@ alerax:
 array_size: 10000
 
 containers:
-  genespace: "ghcr.io/bhban/genespace:1.0"
+  genespace: "ghcr.io/bhban/genespace:1.1"
   macse: "ghcr.io/bhban/macse:1.0"
   iqtree: "ghcr.io/bhban/iqtree:1.0"
   alerax: "ghcr.io/bhban/alerax:1.0"
