@@ -11,10 +11,16 @@ COPY ofInBlk_engine_patched.R /tmp/ofInBlk_engine_patched.R
 
 RUN conda create -y -n genespace --override-channels \
     -c conda-forge -c bioconda \
-    python=3.11 \
+    python=3.11.13 \
+    numpy=2.3.3 \
+    scipy=1.16.2 \
     r-base=4.5 \
     orthofinder=2.5.5 \
     mcscanx=1.0.0 \
+    diamond=2.1.10 \
+    fastme=2.1.6.3 \
+    mcl=14.137 \
+    blast=2.16.0 \
     pandas \
     bioconductor-biostrings \
     bioconductor-rtracklayer \
