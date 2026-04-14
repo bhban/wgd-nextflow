@@ -15,7 +15,7 @@ process PANGENES_PASS_FILTER {
     mkdir -p ${params.postdir}
 
     python ${pangenes_pass_filter_script} \
-      --genespace-wd genespace/${params.working_dir} \
+      --genespace-wd ${genespace_wd} \
       --out-tsv ${params.postdir}/pangenes_PASS.tsv \
       --out-og-list ${params.postdir}/og_list_min4species.txt \
       > pangenes_pass_filter.log 2>&1
@@ -41,10 +41,14 @@ process WRITE_OG_FASTAS {
     path("${params.postdir}/og_fastas.done")
 
     script:
+    def cdsList = cds_files.collect { "\"${it}\"" }.join(' ')
     """
     mkdir -p ${params.postdir}/og_fasta
     mkdir -p cds
-    cp ${cds_files.join(' ')} cds/
+
+    for f in ${cdsList}; do
+      cp "\$f" cds/
+    done
 
     python ${write_og_fastas_script} \
       --pangenes-pass ${pass_tsv} \
@@ -55,6 +59,7 @@ process WRITE_OG_FASTAS {
       > write_og_fastas.log 2>&1
 
     find ${params.postdir}/og_fasta -maxdepth 1 -name 'og_*.fasta' | grep -q .
+    test -s ${params.postdir}/og_list_min4species.txt
     touch ${params.postdir}/og_fastas.done
     """
 }
@@ -141,6 +146,9 @@ process MACSE_REPORT {
 
     awk 'NR>1 && \$2=="OK"{print \$1}' ${params.postdir}/macse_report.tsv \
       > ${params.postdir}/macse_ok_og_list.txt
+
+    test -s ${params.postdir}/macse_report.tsv
+    test -s ${params.postdir}/macse_ok_og_list.txt
     """
 }
 
@@ -184,7 +192,7 @@ process IQTREE_OG {
         exit 0
     fi
 
-    if [ "\$(tr -d '\\r' < ${status})" != "OK" ]; then
+    if [ ! -s ${status} ] || [ "\$(tr -d '\\r' < ${status})" != "OK" ]; then
         echo "FAIL" > og_${og}.iqtree.status
         : > og_${og}_iqtree.treefile
         : > og_${og}_iqtree.ufboot
@@ -194,7 +202,7 @@ process IQTREE_OG {
 
     set +e
     ${params.iqtree_bin} \
-      -s ${nt} \
+      -s og_${og}_NT.fasta \
       -nt ${task.cpus} \
       -m MFP \
       -bb 1000 \
@@ -246,6 +254,9 @@ process IQTREE_REPORT {
 
     awk 'NR>1 && \$2=="OK"{print \$1}' ${params.postdir}/iqtree_report.tsv \
       > ${params.postdir}/iqtree_ok_og_list.txt
+
+    test -s ${params.postdir}/iqtree_report.tsv
+    test -s ${params.postdir}/iqtree_ok_og_list.txt
     """
 }
 
@@ -287,6 +298,7 @@ process WRITE_ALERAX_MAPPING {
     ' ${nt} > og_${og}.mapping.tsv
 
     test -s og_${og}.mapping.tsv
+    test -s og_${og}_iqtree.ufboot
     """
 }
 
@@ -357,6 +369,7 @@ process RUN_ALERAX {
       --gene-tree-samples ${params.alerax.gene_tree_samples} \
       > alerax.log 2>&1
 
+    test -d ${params.postdir}/alerax/output
     touch ${params.postdir}/alerax/alerax.done
     touch ${params.postdir}/post_genespace.done
     """
