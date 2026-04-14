@@ -151,17 +151,33 @@ workflow {
                 }
         }
 
-    macse_out        = MACSE_ALIGN_OG(og_fasta_ch)
-    macse_report_out = MACSE_REPORT(macse_out.collect())
+    macse_out = MACSE_ALIGN_OG(og_fasta_ch)
 
+    macse_report_out = MACSE_REPORT(
+        macse_out
+            .map { og, aa, nt, status -> status }
+            .collect()
+    )
+    
     iqtree_in = macse_out.filter { og, aa, nt, status ->
         status.text.trim() == 'OK'
     }
-
-    iqtree_out        = IQTREE_OG(iqtree_in)
-    iqtree_report_out = IQTREE_REPORT(iqtree_out.collect())
-
+    
+    iqtree_out = IQTREE_OG(iqtree_in)
+    
+    iqtree_report_out = IQTREE_REPORT(
+        iqtree_out
+            .map { og, treefile, ufboot, status, nt -> status }
+            .collect()
+    )
+    
     alerax_map_out = WRITE_ALERAX_MAPPING(iqtree_out)
-    families_out   = WRITE_ALERAX_FAMILIES(alerax_map_out.collect())
+    
+    families_out = WRITE_ALERAX_FAMILIES(
+        alerax_map_out
+            .flatMap { og, mapping, ufboot -> [mapping, ufboot] }
+            .collect()
+    )
+    
     RUN_ALERAX(families_out, species_tree_ch)
 }
