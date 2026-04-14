@@ -34,7 +34,7 @@ as_bool <- function(x) {
 # ----------------------------
 # Tool paths from container PATH
 # ----------------------------
-path2mcscanx <- Sys.which("MCScanX")
+path2mcscanx <- dirname(Sys.which("MCScanX"))
 path2orthofinder <- Sys.which("orthofinder")
 path2diamond <- Sys.which("diamond")
 
