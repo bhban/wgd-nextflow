@@ -26,6 +26,7 @@ RUN conda create -y -n genespace --override-channels \
     r-optparse \
     r-dplyr \
     r-readr \
+    r-data.table \
     xz \
     && conda clean --all --yes
 
