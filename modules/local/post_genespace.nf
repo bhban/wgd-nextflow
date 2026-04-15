@@ -269,8 +269,6 @@ process WRITE_ALERAX_MAPPING {
 
     script:
     """
-    cp ${ufboot} og_${og}_iqtree.ufboot
-
     if [ ! -s ${nt} ]; then
         echo "Missing NT fasta for og_${og}" > og_${og}.mapping.log
         exit 1
@@ -278,6 +276,11 @@ process WRITE_ALERAX_MAPPING {
 
     if [ ! -s ${status} ] || [ "\$(tr -d '\\r' < ${status})" != "OK" ]; then
         echo "IQ-TREE status is not OK for og_${og}" > og_${og}.mapping.log
+        exit 1
+    fi
+
+    if [ ! -s ${ufboot} ]; then
+        echo "Missing ufboot for og_${og}" > og_${og}.mapping.log
         exit 1
     fi
 
@@ -296,7 +299,7 @@ process WRITE_ALERAX_MAPPING {
     ' ${nt} > og_${og}.mapping.tsv
 
     test -s og_${og}.mapping.tsv
-    test -s og_${og}_iqtree.ufboot
+    test -s ${ufboot}
     """
 }
 
