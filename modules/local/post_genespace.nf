@@ -154,7 +154,6 @@ process MACSE_REPORT {
 
 process IQTREE_OG {
     tag { "og_${og}" }
-    array (params.array_size as int)
 
     input:
     tuple val(og), path(aa), path(nt), path(status)
@@ -164,12 +163,11 @@ process IQTREE_OG {
           path("og_${og}_iqtree.treefile"),
           path("og_${og}_iqtree.ufboot"),
           path("og_${og}.iqtree.status"),
-          path("og_${og}_NT.fasta")
+          path(nt.name)
 
     script:
     """
     rm -f og_${og}.iqtree.status og_${og}_iqtree.treefile og_${og}_iqtree.ufboot
-    cp ${nt} og_${og}_NT.fasta
 
     echo "STARTED" > og_${og}.iqtree.status
 
@@ -201,9 +199,9 @@ process IQTREE_OG {
     fi
 
     set +e
-    ${params.iqtree_bin} \
-      -s og_${og}_NT.fasta \
-      -nt ${task.cpus} \
+    iqtree \
+      -s ${nt} \
+      -nt 1 \
       -m MFP \
       -bb 1000 \
       -wbtl \
