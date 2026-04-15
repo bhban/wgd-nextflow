@@ -163,7 +163,7 @@ process IQTREE_OG {
           path("og_${og}_iqtree.treefile"),
           path("og_${og}_iqtree.ufboot"),
           path("og_${og}.iqtree.status"),
-          path(nt.name)
+          path("og_${og}_NT.fasta")
 
     script:
     """
