@@ -92,8 +92,8 @@ def parse_gff_attr(attr_field):
 
 def phytozome_keep_ids_from_gff(gff_fn):
     """
-    Return a set of IDs for which longest=0 (keep),
-    and longest=1 (drop) is ignored.
+    Return a set of IDs for which longest=1 (keep),
+    and longest=0 (drop) is ignored.
     """
     keep = set()
     n_seen = 0
@@ -115,7 +115,7 @@ def phytozome_keep_ids_from_gff(gff_fn):
 
             n_seen += 1
             longest_val = attrs.get("longest", "").strip()
-            if longest_val != "0":
+            if longest_val != "1":
                 continue
 
             # Prefer ID=..., else Parent=..., else Name=...
