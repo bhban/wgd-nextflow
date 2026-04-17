@@ -9,23 +9,31 @@ process PRIMARY_TRANSCRIPT {
     tuple val(genome), val(source), val(ploidy), path("${genome}.primary.pep"), path(gff), path(chr)
 
     script:
-    def cmd = source == 'phytozome'
-        ? """
-          python ${primary_transcript_script} ${pep} \
-            --mode phytozome \
-            --phytozome-gff ${gff} \
-            > ${genome}.log 2>&1
-          """
+    def cmd =
+        source == 'helixer'
+            ? """
+              cp ${pep} ${genome}.primary.pep
+              """
+        : source == 'phytozome'
+            ? """
+              python ${primary_transcript_script} ${pep} \
+                --mode phytozome \
+                --phytozome-gff ${gff} \
+                > ${genome}.log 2>&1
+
+              test -s primary_transcripts/${pep.getName()}
+              cp primary_transcripts/${pep.getName()} ${genome}.primary.pep
+              """
         : """
           python ${primary_transcript_script} ${pep} \
             > ${genome}.log 2>&1
+
+          test -s primary_transcripts/${pep.getName()}
+          cp primary_transcripts/${pep.getName()} ${genome}.primary.pep
           """
 
     """
     ${cmd}
-
-    test -s primary_transcripts/${pep.getName()}
-    cp primary_transcripts/${pep.getName()} ${genome}.primary.pep
     test -s ${genome}.primary.pep
     """
 }
