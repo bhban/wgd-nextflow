@@ -31,7 +31,7 @@ df <- readr::read_tsv(
     ploidy = as.integer(ploidy)
   )
 
-stopifnot(all(df$genome_source %in% c("ncbi", "ensembl", "phytozome")))
+stopifnot(all(df$genome_source %in% c("ncbi", "ensembl", "phytozome", "helixer")))
 stopifnot(!any(is.na(df$ploidy)))
 
 run_one <- function(sub, ..., label) {
@@ -97,6 +97,19 @@ run_one(
   gffStripText = "",
   headerStripText = "",
   label = "phytozome"
+)
+
+# ----------------------------
+# Helixer
+# ----------------------------
+df_hel <- df %>% filter(genome_source == "helixer")
+run_one(
+  df_hel,
+  headerEntryIndex = 1,
+  headerSep = " ",
+  gffStripText = "",
+  headerStripText = "",
+  label = "helixer"
 )
 
 message("All parse_annotations calls complete")
