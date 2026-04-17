@@ -5,7 +5,7 @@ import re
 
 def parse_args():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--source", required=True, choices=["phytozome", "ensembl", "ncbi"])
+    ap.add_argument("--source", required=True, choices=["phytozome", "ensembl", "ncbi", "helixer"])
     ap.add_argument("--in-gff", required=True)
     ap.add_argument("--out-gff", required=True)
     ap.add_argument("--in-pep", required=True)
