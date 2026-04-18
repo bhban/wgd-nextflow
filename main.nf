@@ -128,10 +128,10 @@ workflow {
 
     def orthofinder_dir_arg
     def orthofinder_out = null
-
+    
     if (params.existing_orthofinder_dir) {
         orthofinder_dir_arg = params.existing_orthofinder_dir
-
+    
     } else if (params.run_external_orthofinder) {
         orthofinder_out = ORTHOFINDER_OR_SKIP(
             validated_out,
@@ -139,9 +139,9 @@ workflow {
             orthofinder_or_skip_script_ch
         )
         orthofinder_dir_arg = orthofinder_out[0]
-
+    
     } else {
-        orthofinder_dir_arg = params.orthofinder_dir_override ? params.orthofinder_dir_override : ''
+        orthofinder_dir_arg = ''
     }
 
     genespace_out = RUN_GENESPACE(
