@@ -1,7 +1,7 @@
 nextflow.enable.dsl=2
 
 include { PRIMARY_TRANSCRIPT; FINALIZE_REPO_IDS } from './modules/local/prep'
-include { STAGE_GENOMEREPO; PARSE_ANNOTATIONS_BY_SOURCE; VALIDATE_PARSE_OUTPUTS; ORTHOFINDER_OR_SKIP; RUN_GENESPACE } from './modules/local/genespace'
+include { STAGE_GENOMEREPO; PARSE_ANNOTATIONS_BY_SOURCE; MAKE_PARSE_DONE; VALIDATE_PARSE_OUTPUTS; ORTHOFINDER_OR_SKIP; RUN_GENESPACE } from './modules/local/genespace'
 include { PANGENES_PASS_FILTER; WRITE_OG_FASTAS; MACSE_ALIGN_OG; MACSE_REPORT; IQTREE_OG; IQTREE_REPORT; WRITE_ALERAX_MAPPING; WRITE_ALERAX_FAMILIES; RUN_ALERAX } from './modules/local/post_genespace'
 
 def resolveChrDict(genome) {
@@ -72,47 +72,74 @@ workflow {
 
     genome_ids_ch = Channel.value(genomes_rows.collect { it.genome })
 
-    primary_out = PRIMARY_TRANSCRIPT(
-        genomes_ch,
-        primary_transcript_script_ch
-    )
+    def validated_out
 
-    finalized_out = FINALIZE_REPO_IDS(
-        primary_out,
-        apply_chr_dict_script_ch,
-        finalize_repo_ids_script_ch
-    )
+    if (params.start_mode == 'full') {
+        primary_out = PRIMARY_TRANSCRIPT(
+            genomes_ch,
+            primary_transcript_script_ch
+        )
 
-    staged_repo_out = STAGE_GENOMEREPO(
-        finalized_out
-            .flatMap { genome, source, ploidy, gff, pep, chr ->
-                [gff, pep, chr]
-            }
-            .collect()
-    )
+        finalized_out = FINALIZE_REPO_IDS(
+            primary_out,
+            apply_chr_dict_script_ch,
+            finalize_repo_ids_script_ch
+        )
 
-    parsed_out = PARSE_ANNOTATIONS_BY_SOURCE(
-        staged_repo_out,
-        genomes_tsv_ch,
-        parse_annotations_script_ch
-    )
+        staged_repo_out = STAGE_GENOMEREPO(
+            finalized_out
+                .flatMap { genome, source, ploidy, gff, pep, chr ->
+                    [gff, pep, chr]
+                }
+                .collect()
+        )
 
-    validated_out = VALIDATE_PARSE_OUTPUTS(
-        parsed_out,
-        validate_parse_outputs_script_ch,
-        genome_ids_ch
-    )
+        parsed_out = PARSE_ANNOTATIONS_BY_SOURCE(
+            staged_repo_out,
+            genomes_tsv_ch,
+            parse_annotations_script_ch
+        )
+
+        validated_out = VALIDATE_PARSE_OUTPUTS(
+            parsed_out[0],
+            parsed_out[1],
+            validate_parse_outputs_script_ch,
+            genome_ids_ch
+        )
+
+    } else if (params.start_mode == 'parsed') {
+        if (!params.existing_genespace_wd) {
+            error "When --start_mode parsed is used, --existing_genespace_wd must be provided"
+        }
+
+        existing_wd_ch = Channel.value(file(params.existing_genespace_wd))
+        parse_done_ch  = MAKE_PARSE_DONE()
+
+        validated_out = VALIDATE_PARSE_OUTPUTS(
+            existing_wd_ch,
+            parse_done_ch,
+            validate_parse_outputs_script_ch,
+            genome_ids_ch
+        )
+
+    } else {
+        error "Unsupported start_mode: ${params.start_mode}. Use 'full' or 'parsed'."
+    }
 
     def orthofinder_dir_arg
     def orthofinder_out = null
 
-    if (params.run_external_orthofinder) {
+    if (params.existing_orthofinder_dir) {
+        orthofinder_dir_arg = params.existing_orthofinder_dir
+
+    } else if (params.run_external_orthofinder) {
         orthofinder_out = ORTHOFINDER_OR_SKIP(
             validated_out,
             genome_ids_ch,
             orthofinder_or_skip_script_ch
         )
         orthofinder_dir_arg = orthofinder_out[0]
+
     } else {
         orthofinder_dir_arg = params.orthofinder_dir_override ? params.orthofinder_dir_override : ''
     }
@@ -158,26 +185,26 @@ workflow {
             .map { og, aa, nt, status -> status }
             .collect()
     )
-    
+
     iqtree_in = macse_out.filter { og, aa, nt, status ->
         status.text.trim() == 'OK'
     }
-    
+
     iqtree_out = IQTREE_OG(iqtree_in)
-    
+
     iqtree_report_out = IQTREE_REPORT(
         iqtree_out
             .map { og, treefile, ufboot, status, nt -> status }
             .collect()
     )
-    
+
     alerax_map_out = WRITE_ALERAX_MAPPING(iqtree_out)
-    
+
     families_out = WRITE_ALERAX_FAMILIES(
         alerax_map_out
             .flatMap { og, mapping, ufboot -> [mapping, ufboot] }
             .collect()
     )
-    
+
     RUN_ALERAX(families_out, species_tree_ch)
 }
