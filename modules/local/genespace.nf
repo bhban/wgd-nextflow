@@ -63,6 +63,18 @@ process PARSE_ANNOTATIONS_BY_SOURCE {
     """
 }
 
+process MAKE_PARSE_DONE {
+    tag "make_parse_done"
+
+    output:
+    path("parse_annotations.done")
+
+    script:
+    """
+    touch parse_annotations.done
+    """
+}
+
 process VALIDATE_PARSE_OUTPUTS {
     tag "validate_parse_outputs"
 
