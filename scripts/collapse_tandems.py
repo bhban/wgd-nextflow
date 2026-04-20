@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 
-# Adapted from Emily Haley's 2026-04 filterTandemDups.py
-
-import pandas as pd
 import argparse
 from pathlib import Path
+import pandas as pd
 
 
 def parse_bool(value: str) -> bool:
@@ -43,7 +41,7 @@ def load_outgroup_genomes(genomes_tsv: Path, require_outgroup: bool) -> set[str]
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Collapse tandem duplicates with configurable ord gap"
+        description="Collapse tandem duplicates, rewrite the filtered TSV, and regenerate the OG list."
     )
     parser.add_argument("--infile", required=True, help="Input PASS pangenes TSV")
     parser.add_argument("--genomes-tsv", required=True, help="Input genomes TSV")
@@ -54,7 +52,7 @@ def main():
         "--max_ord_gap",
         type=int,
         default=1,
-        help="Maximum allowed gap in gene order to define tandem cluster (default: 1)"
+        help="Maximum allowed difference in ord values to define a tandem cluster (default: 1)"
     )
     parser.add_argument(
         "--require-outgroup",
@@ -63,7 +61,13 @@ def main():
     )
     args = parser.parse_args()
 
-    df = pd.read_csv(args.infile, sep="\t", dtype=str)
+    infile = Path(args.infile)
+    genomes_tsv = Path(args.genomes_tsv)
+    outfile_filtered = Path(args.outfile_filtered)
+    outfile_tandems = Path(args.outfile_tandems)
+    outfile_og_list = Path(args.outfile_og_list)
+
+    df = pd.read_csv(infile, sep="\t", dtype=str)
 
     required_cols = ["og", "genome", "chr", "id", "ord"]
     missing = [c for c in required_cols if c not in df.columns]
@@ -74,6 +78,9 @@ def main():
         df[col] = df[col].fillna("").astype(str).str.strip()
 
     df["ord_num"] = pd.to_numeric(df["ord"], errors="coerce")
+
+    input_rows = len(df)
+    input_ogs = df["og"].nunique()
 
     kept_rows = []
     tandem_records = []
@@ -91,11 +98,13 @@ def main():
             prev = cluster[-1]
             curr = subdf.iloc[i]
 
-            if (
+            same_cluster = (
                 pd.notna(prev["ord_num"]) and
                 pd.notna(curr["ord_num"]) and
                 curr["ord_num"] <= prev["ord_num"] + args.max_ord_gap
-            ):
+            )
+
+            if same_cluster:
                 cluster.append(curr)
             else:
                 kept = cluster[0]
@@ -108,7 +117,9 @@ def main():
                         "genome": genome,
                         "chr": chr_id,
                         "kept_gene": kept["id"],
-                        "removed_genes": ",".join(removed)
+                        "removed_genes": ",".join(removed),
+                        "cluster_size": len(cluster),
+                        "n_removed": len(cluster) - 1
                     })
 
                 cluster = [curr]
@@ -123,22 +134,32 @@ def main():
                 "genome": genome,
                 "chr": chr_id,
                 "kept_gene": kept["id"],
-                "removed_genes": ",".join(removed)
+                "removed_genes": ",".join(removed),
+                "cluster_size": len(cluster),
+                "n_removed": len(cluster) - 1
             })
 
-    out_df = pd.DataFrame(kept_rows).drop(columns=["ord_num"], errors="ignore")
+    collapsed_df = pd.DataFrame(kept_rows).drop(columns=["ord_num"], errors="ignore")
     tandem_df = pd.DataFrame(tandem_records)
 
-    outgroup_genomes = load_outgroup_genomes(Path(args.genomes_tsv), args.require_outgroup)
+    rows_after_collapse = len(collapsed_df)
+    ogs_after_collapse = collapsed_df["og"].nunique() if not collapsed_df.empty else 0
+    tandem_clusters_found = len(tandem_df)
+    rows_removed_by_tandem = input_rows - rows_after_collapse
 
-    og_stats = out_df.groupby("og").agg(
+    outgroup_genomes = load_outgroup_genomes(genomes_tsv, args.require_outgroup)
+
+    if collapsed_df.empty:
+        raise SystemExit("No rows remain after tandem collapsing.")
+
+    og_stats = collapsed_df.groupby("og").agg(
         n_rows=("id", "size"),
         n_genomes=("genome", "nunique")
     ).reset_index()
 
     if args.require_outgroup:
         outgroup_flag = (
-            out_df.assign(is_outgroup=out_df["genome"].isin(outgroup_genomes))
+            collapsed_df.assign(is_outgroup=collapsed_df["genome"].isin(outgroup_genomes))
             .groupby("og")["is_outgroup"]
             .any()
             .reset_index()
@@ -163,29 +184,58 @@ def main():
             ]
         )
 
-    out_df = out_df[out_df["og"].isin(keep_ogs)].copy()
+    final_df = collapsed_df[collapsed_df["og"].isin(keep_ogs)].copy()
 
-    out_df.to_csv(args.outfile_filtered, sep="\t", index=False)
+    final_rows = len(final_df)
+    final_ogs = final_df["og"].nunique() if not final_df.empty else 0
+    rows_removed_by_og_refilter = rows_after_collapse - final_rows
 
-    with open(args.outfile_og_list, "w") as f:
+    outfile_filtered.parent.mkdir(parents=True, exist_ok=True)
+    outfile_tandems.parent.mkdir(parents=True, exist_ok=True)
+    outfile_og_list.parent.mkdir(parents=True, exist_ok=True)
+
+    if final_df.empty:
+        raise SystemExit(
+            "No rows remain after re-filtering OGs following tandem collapse. "
+            "No output files were written."
+        )
+
+    final_df.to_csv(outfile_filtered, sep="\t", index=False)
+
+    with open(outfile_og_list, "w") as f:
         for og in sorted(keep_ogs):
             f.write(f"{og}\n")
 
-    if len(tandem_df) == 0:
-        print("No tandem clusters found.")
-        pd.DataFrame(columns=["og", "genome", "chr", "kept_gene", "removed_genes"]) \
-            .to_csv(args.outfile_tandems, sep="\t", index=False)
+    if tandem_df.empty:
+        pd.DataFrame(
+            columns=["og", "genome", "chr", "kept_gene", "removed_genes", "cluster_size", "n_removed"]
+        ).to_csv(outfile_tandems, sep="\t", index=False)
     else:
-        tandem_df.to_csv(args.outfile_tandems, sep="\t", index=False)
+        tandem_df.to_csv(outfile_tandems, sep="\t", index=False)
 
     print("--------------------------------------------------")
-    print(f"Input rows: {len(df)}")
-    print(f"Output rows: {len(out_df)}")
-    print(f"Removed tandem genes: {len(df) - len(out_df)}")
-    print(f"Tandem clusters found: {len(tandem_df)}")
-    print(f"Filtered file: {args.outfile_filtered}")
-    print(f"Tandem report: {args.outfile_tandems}")
-    print(f"Rewritten OG list: {args.outfile_og_list}")
+    print("collapse_tandems summary")
+    print("--------------------------------------------------")
+    print(f"Input file: {infile}")
+    print(f"Input rows: {input_rows}")
+    print(f"Input OGs: {input_ogs}")
+    print(f"Max ord gap used: {args.max_ord_gap}")
+    print(f"Outgroup requirement enabled: {'yes' if args.require_outgroup else 'no'}")
+    if args.require_outgroup:
+        print(f"Outgroup genomes loaded: {len(outgroup_genomes)}")
+    print("--------------------------------------------------")
+    print(f"Rows after tandem collapse: {rows_after_collapse}")
+    print(f"OGs after tandem collapse: {ogs_after_collapse}")
+    print(f"Tandem clusters found: {tandem_clusters_found}")
+    print(f"Rows removed by tandem collapse: {rows_removed_by_tandem}")
+    print("--------------------------------------------------")
+    print(f"Final rows after OG re-filtering: {final_rows}")
+    print(f"Final OGs retained: {final_ogs}")
+    print(f"Rows dropped by OG re-filtering after collapse: {rows_removed_by_og_refilter}")
+    print("--------------------------------------------------")
+    print(f"Filtered TSV written to: {outfile_filtered}")
+    print(f"Tandem report written to: {outfile_tandems}")
+    print(f"OG list written to: {outfile_og_list}")
     print("--------------------------------------------------")
 
 
