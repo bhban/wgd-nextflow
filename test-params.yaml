@@ -31,6 +31,8 @@ genespace:
   orthofinder_in_blk: true
 
 require_outgroup_og: true
+collapse_tandems: true
+tandem_max_ord_gap: 2
 
 array_size: 10000
 
