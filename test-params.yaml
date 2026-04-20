@@ -30,6 +30,8 @@ genespace:
   blkSize: 5
   orthofinder_in_blk: true
 
+require_outgroup_og: true
+
 array_size: 10000
 
 sif_paths:
