@@ -29,6 +29,40 @@ process PANGENES_PASS_FILTER {
     """
 }
 
+process COLLAPSE_TANDEMS {
+    tag "collapse_tandems"
+
+    input:
+    path pass_tsv
+    path genomes_tsv
+    path collapse_tandems_script
+
+    output:
+    path("${params.postdir}/pangenes_PASS.collapsed.tsv")
+    path("${params.postdir}/tandem_report.tsv")
+    path("${params.postdir}/og_list_min4species.collapsed.txt")
+
+    script:
+    def requireOutgroupArg = params.require_outgroup_og ? "--require-outgroup" : ""
+    """
+    mkdir -p ${params.postdir}
+
+    python ${collapse_tandems_script} \
+      --infile ${pass_tsv} \
+      --genomes-tsv ${genomes_tsv} \
+      --outfile_filtered ${params.postdir}/pangenes_PASS.collapsed.tsv \
+      --outfile_tandems ${params.postdir}/tandem_report.tsv \
+      --outfile_og_list ${params.postdir}/og_list_min4species.collapsed.txt \
+      --max_ord_gap ${params.tandem_max_ord_gap} \
+      ${requireOutgroupArg} \
+      > collapse_tandems.log 2>&1
+
+    test -s ${params.postdir}/pangenes_PASS.collapsed.tsv
+    test -s ${params.postdir}/tandem_report.tsv
+    test -s ${params.postdir}/og_list_min4species.collapsed.txt
+    """
+}
+
 process WRITE_OG_FASTAS {
     tag "write_og_fastas"
 
