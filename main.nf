@@ -22,6 +22,7 @@ def readGenomesTable(tsvPath) {
     def idxGenome = header.indexOf('genome_id')
     def idxSource = header.indexOf('genome_source')
     def idxPloidy = header.indexOf('ploidy')
+    def idxOutgroup = header.indexOf('outgroup')
 
     if (idxGenome < 0 || idxSource < 0 || idxPloidy < 0) {
         throw new IllegalArgumentException("genomes TSV must contain columns: genome_id, genome_source, ploidy")
@@ -31,9 +32,10 @@ def readGenomesTable(tsvPath) {
     lines.drop(1).each { line ->
         def cols = line.split('\t', -1) as List
         rows << [
-            genome : cols[idxGenome].trim(),
-            source : cols[idxSource].trim().toLowerCase(),
-            ploidy : cols[idxPloidy].trim() as Integer
+            genome   : cols[idxGenome].trim(),
+            source   : cols[idxSource].trim().toLowerCase(),
+            ploidy   : cols[idxPloidy].trim() as Integer,
+            outgroup : idxOutgroup >= 0 ? cols[idxOutgroup].trim().toLowerCase() : "no"
         ]
     }
 
