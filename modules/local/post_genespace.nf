@@ -4,6 +4,7 @@ process PANGENES_PASS_FILTER {
     input:
     path genespace_wd
     path genespace_done
+    path genomes_tsv
     path pangenes_pass_filter_script
 
     output:
@@ -11,13 +12,16 @@ process PANGENES_PASS_FILTER {
     path("${params.postdir}/og_list_min4species.txt")
 
     script:
+    def requireOutgroupArg = params.require_outgroup_og ? "--require-outgroup" : ""
     """
     mkdir -p ${params.postdir}
 
     python ${pangenes_pass_filter_script} \
       --genespace-wd ${genespace_wd} \
+      --genomes-tsv ${genomes_tsv} \
       --out-tsv ${params.postdir}/pangenes_PASS.tsv \
       --out-og-list ${params.postdir}/og_list_min4species.txt \
+      ${requireOutgroupArg} \
       > pangenes_pass_filter.log 2>&1
 
     test -s ${params.postdir}/pangenes_PASS.tsv
