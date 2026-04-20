@@ -48,8 +48,6 @@ def iter_chunks(path: Path, chunksize: int):
 
 
 def normalize_key_columns(df: pd.DataFrame, col_flag: str, col_id: str, col_og: str, col_genome: str) -> pd.DataFrame:
-    # Only normalize the columns needed for filtering/grouping.
-    # Fill NA before string ops so behavior is stable.
     df[col_flag] = df[col_flag].fillna("").astype(str).str.strip()
     df[col_id] = df[col_id].fillna("").astype(str).str.strip()
     df[col_og] = df[col_og].fillna("").astype(str).str.strip()
@@ -57,12 +55,57 @@ def normalize_key_columns(df: pd.DataFrame, col_flag: str, col_id: str, col_og: 
     return df
 
 
+def parse_bool(value: str) -> bool:
+    v = str(value).strip().lower()
+    if v in {"yes", "true", "1"}:
+        return True
+    if v in {"no", "false", "0", ""}:
+        return False
+    raise SystemExit(
+        f"Could not parse boolean value '{value}'. Use yes/no, true/false, or 1/0."
+    )
+
+
+def load_outgroup_genomes(genomes_tsv: Path, require_outgroup: bool) -> set[str]:
+    df = pd.read_csv(genomes_tsv, sep="\t", dtype=str).fillna("")
+
+    required_cols = {"genome_id"}
+    missing = required_cols - set(df.columns)
+    if missing:
+        raise SystemExit(
+            f"Missing required columns in genomes TSV: {', '.join(sorted(missing))}"
+        )
+
+    if "outgroup" not in df.columns:
+        if require_outgroup:
+            raise SystemExit(
+                "The genomes TSV must contain an 'outgroup' column when --require-outgroup is used."
+            )
+        return set()
+
+    df["genome_id"] = df["genome_id"].astype(str).str.strip()
+    df["outgroup"] = df["outgroup"].astype(str).str.strip()
+
+    outgroup_genomes = {
+        row["genome_id"]
+        for _, row in df.iterrows()
+        if parse_bool(row["outgroup"])
+    }
+    return outgroup_genomes
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--genespace-wd", required=True)
+    ap.add_argument("--genomes-tsv", required=True)
     ap.add_argument("--out-tsv", required=True)
     ap.add_argument("--out-og-list", required=True)
     ap.add_argument("--chunksize", type=int, default=100000)
+    ap.add_argument(
+        "--require-outgroup",
+        action="store_true",
+        help="Require each retained OG to include at least one outgroup genome"
+    )
     args = ap.parse_args()
 
     wd = Path(args.genespace_wd)
@@ -74,30 +117,28 @@ def main():
     if not files:
         raise SystemExit(f"No pangenes files found in: {pang_dir}")
 
-    # Determine columns from the first file header/chunk
+    outgroup_genomes = load_outgroup_genomes(Path(args.genomes_tsv), args.require_outgroup)
+
     first_chunk, first_cols = first_chunk_and_columns(files[0], args.chunksize)
     col_flag, col_id, col_og, col_genome = resolve_columns(first_cols)
 
-    # Pass 1: determine which OGs pass after global PASS filter + global first-id dedup
     seen_ids = set()
     row_count = defaultdict(int)
     genomes_by_og = defaultdict(set)
+    has_outgroup = defaultdict(bool)
 
     for fp in files:
         for chunk in iter_chunks(fp, args.chunksize):
-            # Ensure expected columns exist
             missing = [c for c in [col_flag, col_id, col_og, col_genome] if c not in chunk.columns]
             if missing:
                 raise SystemExit(f"Missing expected columns {missing} in file: {fp}")
 
             chunk = normalize_key_columns(chunk, col_flag, col_id, col_og, col_genome)
 
-            # PASS only
             chunk = chunk[chunk[col_flag] == "PASS"]
             if chunk.empty:
                 continue
 
-            # Preserve original behavior: keep first occurrence of each id in global order
             keep_mask = []
             for gene_id in chunk[col_id]:
                 if gene_id in seen_ids:
@@ -110,24 +151,31 @@ def main():
             if chunk.empty:
                 continue
 
-            # Update OG stats
             for og, subdf in chunk.groupby(col_og, sort=False, dropna=False):
                 row_count[og] += len(subdf)
                 genomes_by_og[og].update(subdf[col_genome].tolist())
+                if args.require_outgroup and any(g in outgroup_genomes for g in subdf[col_genome]):
+                    has_outgroup[og] = True
 
-    keep_ogs = {
-        og for og in row_count
-        if row_count[og] >= 4 and len(genomes_by_og[og]) >= 4
-    }
+    if args.require_outgroup:
+        keep_ogs = {
+            og for og in row_count
+            if row_count[og] >= 4
+            and len(genomes_by_og[og]) >= 4
+            and has_outgroup[og]
+        }
+    else:
+        keep_ogs = {
+            og for og in row_count
+            if row_count[og] >= 4 and len(genomes_by_og[og]) >= 4
+        }
 
-    # Write OG list
     out_og = Path(args.out_og_list)
     out_og.parent.mkdir(parents=True, exist_ok=True)
     with open(out_og, "w") as f:
         for og in sorted(keep_ogs):
             f.write(f"{og}\n")
 
-    # Pass 2: write all retained rows with all original columns
     out_tsv = Path(args.out_tsv)
     out_tsv.parent.mkdir(parents=True, exist_ok=True)
 
@@ -142,12 +190,10 @@ def main():
 
             chunk = normalize_key_columns(chunk, col_flag, col_id, col_og, col_genome)
 
-            # PASS only
             chunk = chunk[chunk[col_flag] == "PASS"]
             if chunk.empty:
                 continue
 
-            # Global first-occurrence dedup by id, same as original script
             keep_mask = []
             for gene_id in chunk[col_id]:
                 if gene_id in seen_ids:
@@ -160,7 +206,6 @@ def main():
             if chunk.empty:
                 continue
 
-            # Keep only OGs that pass thresholds
             chunk = chunk[chunk[col_og].isin(keep_ogs)]
             if chunk.empty:
                 continue
