@@ -156,10 +156,23 @@ workflow {
         genomes_tsv_ch,
         pangenes_pass_filter_script_ch
     )
-
+    
+    pass_tsv_for_og = pass_out[0]
+    og_list_for_og  = pass_out[1]
+    
+    if (params.collapse_tandems) {
+        tandem_out = COLLAPSE_TANDEMS(
+            pass_tsv_for_og,
+            genomes_tsv_ch,
+            collapse_tandems_script_ch
+        )
+        pass_tsv_for_og = tandem_out[0]
+        og_list_for_og = tandem_out[2]
+    }
+    
     og_fastas_out = WRITE_OG_FASTAS(
-        pass_out[0],
-        pass_out[1],
+        pass_tsv_for_og,
+        og_list_for_og,
         genomes_tsv_ch,
         cds_files_ch,
         write_og_fastas_script_ch
