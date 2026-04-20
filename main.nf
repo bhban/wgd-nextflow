@@ -153,6 +153,7 @@ workflow {
 
     pass_out = PANGENES_PASS_FILTER(
         genespace_out,
+        genomes_tsv_ch,
         pangenes_pass_filter_script_ch
     )
 
