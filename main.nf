@@ -68,6 +68,7 @@ workflow {
     orthofinder_or_skip_script_ch    = Channel.value(file('scripts/orthofinder_or_skip.py'))
     run_genespace_script_ch          = Channel.value(file('scripts/run_genespace.R'))
     pangenes_pass_filter_script_ch   = Channel.value(file('scripts/pangenes_pass_filter.py'))
+    collapse_tandems_script_ch       = Channel.value(file('scripts/collapse_tandems.py'))
     write_og_fastas_script_ch        = Channel.value(file('scripts/write_og_fastas.py'))
 
     genome_ids_ch = Channel.value(genomes_rows.collect { it.genome })
