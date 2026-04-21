@@ -14,6 +14,11 @@ def parse_args():
     ap.add_argument("--analysis-threads", type=int, default=1)
     ap.add_argument("--genomes", nargs="+", required=True)
     ap.add_argument("--force", default="false")
+    ap.add_argument(
+        "--species-tree",
+        default="",
+        help="Optional species tree file to pass to OrthoFinder with -s"
+    )
     return ap.parse_args()
 
 
@@ -31,6 +36,18 @@ def read_species_set(of_dir: Path):
 def write_species_set(of_dir: Path, genomes):
     marker = of_dir / "species_set.txt"
     marker.write_text("\n".join(sorted(genomes)) + "\n")
+
+
+def read_species_tree_setting(of_dir: Path):
+    marker = of_dir / "species_tree_arg.txt"
+    if not marker.exists():
+        return None
+    return marker.read_text().strip()
+
+
+def write_species_tree_setting(of_dir: Path, species_tree: str):
+    marker = of_dir / "species_tree_arg.txt"
+    marker.write_text(f"{species_tree.strip()}\n")
 
 
 def find_results_dir(of_dir: Path):
@@ -64,6 +81,7 @@ def main():
     peptide_dir = Path(args.peptide_dir)
     of_dir = Path(args.orthofinder_dir)
     force = as_bool(args.force)
+    species_tree = args.species_tree.strip()
 
     if not peptide_dir.exists():
         print(f"ERROR: peptide dir not found: {peptide_dir}", file=sys.stderr)
@@ -73,17 +91,38 @@ def main():
         print("ERROR: --analysis-threads must be >= 1", file=sys.stderr)
         sys.exit(2)
 
+    if species_tree and not Path(species_tree).exists():
+        print(f"ERROR: species tree file not found: {species_tree}", file=sys.stderr)
+        sys.exit(2)
+
     expected = sorted(args.genomes)
 
-    existing = read_species_set(of_dir)
-    if of_dir.exists() and existing is not None and sorted(existing) == expected and not force:
-        print(f"Found existing OrthoFinder run in {of_dir} with matching species_set.txt; skipping.")
+    existing_species = read_species_set(of_dir)
+    existing_tree_setting = read_species_tree_setting(of_dir)
+
+    can_reuse = (
+        of_dir.exists() and
+        existing_species is not None and
+        sorted(existing_species) == expected and
+        existing_tree_setting == species_tree and
+        not force
+    )
+
+    if can_reuse:
+        print(f"Found existing OrthoFinder run in {of_dir} with matching species set and species tree setting; skipping.")
         results_dir = require_results_dir(of_dir)
         print(f"Using existing Results dir: {results_dir}")
         (of_dir / "orthofinder.skipped").write_text("skipped\n")
         return
 
-    print("Running OrthoFinder (new run or mismatched species set).")
+    if of_dir.exists() and not force:
+        print("Existing OrthoFinder directory cannot be reused because settings differ.")
+        print(f"Expected species set: {expected}")
+        print(f"Existing species set: {existing_species}")
+        print(f"Requested species tree: {species_tree if species_tree else '[none]'}")
+        print(f"Existing species tree: {existing_tree_setting if existing_tree_setting is not None else '[missing marker]'}")
+
+    print("Running OrthoFinder (new run or mismatched settings).")
     of_dir.parent.mkdir(parents=True, exist_ok=True)
 
     cmd = [
@@ -94,10 +133,14 @@ def main():
         "-o", str(of_dir),
     ]
 
+    if species_tree:
+        cmd.extend(["-s", species_tree])
+
     print("Command:", " ".join(cmd))
     subprocess.check_call(cmd)
 
     write_species_set(of_dir, expected)
+    write_species_tree_setting(of_dir, species_tree)
 
     results_dir = require_results_dir(of_dir)
     print(f"OrthoFinder finished. Results dir: {results_dir}")
