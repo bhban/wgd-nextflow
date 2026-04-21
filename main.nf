@@ -149,15 +149,15 @@ workflow {
 
     def orthofinder_dir_arg
     def orthofinder_out = null
-
+    
     def use_external_orthofinder = (
         params.run_external_orthofinder ||
         params.use_species_tree_for_orthofinder
     )
-
+    
     if (params.existing_orthofinder_dir) {
         orthofinder_dir_arg = params.existing_orthofinder_dir
-
+    
     } else if (use_external_orthofinder) {
         orthofinder_out = ORTHOFINDER_OR_SKIP(
             validated_out,
@@ -166,11 +166,11 @@ workflow {
             orthofinder_species_tree_arg
         )
         orthofinder_dir_arg = orthofinder_out[0]
-
+    
     } else {
         orthofinder_dir_arg = ''
     }
-
+    
     genespace_out = RUN_GENESPACE(
         validated_out,
         orthofinder_dir_arg,
