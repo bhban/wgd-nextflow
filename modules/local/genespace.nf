@@ -109,6 +109,7 @@ process ORTHOFINDER_OR_SKIP {
     path parse_ok
     val genomes
     path orthofinder_or_skip_script
+    val species_tree_arg
 
     output:
     path("orthofinder")
@@ -116,6 +117,7 @@ process ORTHOFINDER_OR_SKIP {
 
     script:
     def genomes_arg = genomes.join(' ')
+    def of_species_tree_arg = species_tree_arg ? "--species-tree ${species_tree_arg}" : ""
 
     """
     rm -rf orthofinder
@@ -128,6 +130,7 @@ process ORTHOFINDER_OR_SKIP {
       --orthofinder-bin ${params.orthofinder_bin} \
       --genomes ${genomes_arg} \
       --force ${params.force_orthofinder} \
+      ${of_species_tree_arg} \
       > orthofinder.log 2>&1
 
     touch orthofinder.done
