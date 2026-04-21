@@ -45,6 +45,16 @@ def readGenomesTable(tsvPath) {
 workflow {
     genomes_rows = readGenomesTable(params.genomes_tsv)
 
+    def species_tree_path = params.species_tree?.toString()?.trim()
+
+    if (params.use_species_tree_for_orthofinder && !species_tree_path) {
+        error "--species_tree must be provided when --use_species_tree_for_orthofinder is true"
+    }
+
+    if (params.use_species_tree_for_alerax && !species_tree_path) {
+        error "--species_tree must be provided when --use_species_tree_for_alerax is true"
+    }
+
     genomes_ch = Channel
         .fromList(genomes_rows)
         .map { row ->
@@ -58,9 +68,17 @@ workflow {
             )
         }
 
-    genomes_tsv_ch  = Channel.value(file(params.genomes_tsv))
-    species_tree_ch = Channel.value(file(params.alerax.species_tree))
-    cds_files_ch    = Channel.fromPath("${params.cds_dir}/*.cds").collect()
+    genomes_tsv_ch = Channel.value(file(params.genomes_tsv))
+    cds_files_ch   = Channel.fromPath("${params.cds_dir}/*.cds").collect()
+
+    // These are passed as plain values, not path channels
+    def orthofinder_species_tree_arg = (
+        params.use_species_tree_for_orthofinder && species_tree_path
+    ) ? species_tree_path : ""
+
+    def alerax_species_tree_arg = (
+        params.use_species_tree_for_alerax && species_tree_path
+    ) ? species_tree_path : "random"
 
     primary_transcript_script_ch     = Channel.value(file('scripts/primary_transcript.py'))
     apply_chr_dict_script_ch         = Channel.value(file('scripts/apply_chr_dict_to_gff.py'))
@@ -131,18 +149,24 @@ workflow {
 
     def orthofinder_dir_arg
     def orthofinder_out = null
-    
+
+    def use_external_orthofinder = (
+        params.run_external_orthofinder ||
+        params.use_species_tree_for_orthofinder
+    )
+
     if (params.existing_orthofinder_dir) {
         orthofinder_dir_arg = params.existing_orthofinder_dir
-    
-    } else if (params.run_external_orthofinder) {
+
+    } else if (use_external_orthofinder) {
         orthofinder_out = ORTHOFINDER_OR_SKIP(
             validated_out,
             genome_ids_ch,
-            orthofinder_or_skip_script_ch
+            orthofinder_or_skip_script_ch,
+            orthofinder_species_tree_arg
         )
         orthofinder_dir_arg = orthofinder_out[0]
-    
+
     } else {
         orthofinder_dir_arg = ''
     }
@@ -159,10 +183,10 @@ workflow {
         genomes_tsv_ch,
         pangenes_pass_filter_script_ch
     )
-    
+
     pass_tsv_for_og = pass_out[0]
     og_list_for_og  = pass_out[1]
-    
+
     if (params.collapse_tandems) {
         tandem_out = COLLAPSE_TANDEMS(
             pass_tsv_for_og,
@@ -170,9 +194,9 @@ workflow {
             collapse_tandems_script_ch
         )
         pass_tsv_for_og = tandem_out[0]
-        og_list_for_og = tandem_out[2]
+        og_list_for_og  = tandem_out[2]
     }
-    
+
     og_fastas_out = WRITE_OG_FASTAS(
         pass_tsv_for_og,
         og_list_for_og,
@@ -223,5 +247,5 @@ workflow {
             .collect()
     )
 
-    RUN_ALERAX(families_out, species_tree_ch)
+    RUN_ALERAX(families_out, alerax_species_tree_arg)
 }
