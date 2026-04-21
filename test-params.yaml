@@ -22,7 +22,7 @@ existing_genespace_wd: "exports/eddie/scratch/s2428892/wgd-nextflow/genomeRepo"
 existing_orthofinder_dir: null
 
 force_orthofinder: false
-run_external_orthofinder: false
+run_external_orthofinder: true
 orthofinder_analysis_threads: 2
 
 genespace:
