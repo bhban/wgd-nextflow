@@ -7,7 +7,6 @@ suppressPackageStartupMessages({
 
 option_list <- list(
   make_option("--genespace-wd", type = "character"),
-  make_option("--orthofinder-dir", type = "character", default = NULL),
   make_option("--genomes-tsv", type = "character"),
   make_option("--raw-orthofinder-dir", type = "character", default = ""),
   make_option("--blk-size", type = "integer"),
@@ -49,46 +48,18 @@ if (path2diamond == "") {
 }
 
 # ----------------------------
-# OrthoFinder directory
+# Optional raw Orthofinder directory
 # ----------------------------
 rawOrthofinderDir <- opt$`raw-orthofinder-dir`
-cli_orthofinder_dir <- opt$`orthofinder-dir`
 
-if (!is.null(cli_orthofinder_dir) && cli_orthofinder_dir != "") {
-  results_txt <- file.path(cli_orthofinder_dir, "results_dir.txt")
-
-  if (!file.exists(results_txt)) {
-    stop(paste0(
-      "--orthofinder-dir was provided, but results_dir.txt was not found: ",
-      results_txt,
-      "\nThis should be created by orthofinder_or_skip.py"
-    ))
-  }
-
-  rawOrthofinderDir <- readLines(results_txt, warn = FALSE)[1]
-  rawOrthofinderDir <- trimws(rawOrthofinderDir)
-
-  if (is.na(rawOrthofinderDir) || rawOrthofinderDir == "") {
-    stop(paste0("results_dir.txt was empty: ", results_txt))
-  }
-
-  if (!dir.exists(rawOrthofinderDir)) {
-    stop(paste0("Results dir from results_dir.txt does not exist: ", rawOrthofinderDir))
-  }
-
-  message("Using OrthoFinder results derived from --orthofinder-dir: ", cli_orthofinder_dir)
-
-} else if (!is.null(rawOrthofinderDir) && rawOrthofinderDir != "") {
-
+if (!is.null(rawOrthofinderDir) && rawOrthofinderDir != "") {
   if (!dir.exists(rawOrthofinderDir)) {
     stop(paste0("--raw-orthofinder-dir does not exist: ", rawOrthofinderDir))
   }
-
-  message("Using OrthoFinder results from --raw-orthofinder-dir")
-
+  message("Using OrthoFinder results from --raw-orthofinder-dir: ", rawOrthofinderDir)
 } else {
   rawOrthofinderDir <- NULL
-  message("No OrthoFinder directory provided; proceeding without rawOrthofinderDir")
+  message("No --raw-orthofinder-dir provided; GENESPACE will look for orthofinder results in the working directory")
 }
 
 # ----------------------------
@@ -160,4 +131,3 @@ gpar <- do.call(init_genespace, gs_args)
 
 out <- run_genespace(gpar, overwrite = TRUE)
 cat("GENESPACE complete\n")
-                       
