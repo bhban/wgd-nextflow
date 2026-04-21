@@ -18,7 +18,7 @@ iqtree_bin: "iqtree3"
 alerax_bin: "alerax"
 
 start_mode: "parsed"
-existing_genespace_wd: "/exports/eddie/scratch/s2428892/wgd-nextflow/genomeRepo"
+existing_genespace_wd: "/exports/eddie/scratch/s2428892/wgd-nextflow/workingDir_test"
 existing_orthofinder_dir: null
 
 force_orthofinder: false
