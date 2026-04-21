@@ -388,7 +388,7 @@ process RUN_ALERAX {
 
     input:
     path families
-    path species_tree
+    val species_tree_arg
 
     output:
     path("${params.postdir}/alerax/output")
@@ -401,7 +401,7 @@ process RUN_ALERAX {
 
     mpiexec -np ${task.cpus} ${params.alerax_bin} \
       -f ${families} \
-      -s ${species_tree} \
+      -s ${species_tree_arg} \
       -p ${params.postdir}/alerax/output \
       -r ${params.alerax.rec_model} \
       --model-parametrization ${params.alerax.model_parametrization} \
