@@ -300,6 +300,7 @@ process IQTREE_REPORT {
 
 process WRITE_ALERAX_MAPPING {
     tag { "og_${og}" }
+    array (params.array_size as int)
 
     input:
     tuple val(og), path(treefile), path(ufboot), path(status), path(nt)
