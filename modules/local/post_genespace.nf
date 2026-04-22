@@ -241,7 +241,7 @@ process IQTREE_OG {
     set +e
     ${params.iqtree_bin} \
       -s ${nt} \
-      -nt 1 \
+      -T ${task.cpus} \
       -m MFP \
       -bb 1000 \
       -wbtl \
