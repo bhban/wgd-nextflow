@@ -17,15 +17,22 @@ macse_bin: "macse"
 iqtree_bin: "iqtree3"
 alerax_bin: "alerax"
 
+start_mode: "parsed"
+existing_genespace_wd: "/exports/eddie/scratch/s2428892/wgd-nextflow/workingDir_test"
+existing_orthofinder_dir: null
+
 force_orthofinder: false
-run_external_orthofinder: false
-orthofinder_dir_override: ""
+run_external_orthofinder: true
 orthofinder_analysis_threads: 2
 
 genespace:
   rawOrthofinderDir: ""
   blkSize: 5
   orthofinder_in_blk: true
+
+require_outgroup_og: true
+collapse_tandems: true
+tandem_max_ord_gap: 2
 
 array_size: 10000
 
@@ -35,8 +42,11 @@ sif_paths:
   iqtree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/iqtree_1.0.sif"
   alerax: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/alerax_1.0.sif"
 
+species_tree: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/species_tree.nwk"
+use_species_tree_for_orthofinder: true
+use_species_tree_for_alerax: true
+
 alerax:
-  species_tree: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/species_tree.nwk"
   rec_model: "UndatedDL"
   model_parametrization: "PER-SPECIES"
   gene_tree_samples: 10

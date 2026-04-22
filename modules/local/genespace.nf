@@ -63,6 +63,18 @@ process PARSE_ANNOTATIONS_BY_SOURCE {
     """
 }
 
+process MAKE_PARSE_DONE {
+    tag "make_parse_done"
+
+    output:
+    path("parse_annotations.done")
+
+    script:
+    """
+    touch parse_annotations.done
+    """
+}
+
 process VALIDATE_PARSE_OUTPUTS {
     tag "validate_parse_outputs"
 
@@ -97,6 +109,7 @@ process ORTHOFINDER_OR_SKIP {
     path parse_ok
     val genomes
     path orthofinder_or_skip_script
+    val species_tree_arg
 
     output:
     path("orthofinder")
@@ -104,6 +117,7 @@ process ORTHOFINDER_OR_SKIP {
 
     script:
     def genomes_arg = genomes.join(' ')
+    def of_species_tree_arg = species_tree_arg ? "--species-tree ${species_tree_arg}" : ""
 
     """
     rm -rf orthofinder
@@ -116,6 +130,7 @@ process ORTHOFINDER_OR_SKIP {
       --orthofinder-bin ${params.orthofinder_bin} \
       --genomes ${genomes_arg} \
       --force ${params.force_orthofinder} \
+      ${of_species_tree_arg} \
       > orthofinder.log 2>&1
 
     touch orthofinder.done
@@ -137,13 +152,17 @@ process RUN_GENESPACE {
     path("genespace.done")
 
     script:
-    def of_arg = orthofinder_dir_arg ? "--orthofinder-dir ${orthofinder_dir_arg}" : ""
     def raw_of_arg = params.genespace.rawOrthofinderDir ? "--raw-orthofinder-dir ${params.genespace.rawOrthofinderDir}" : ""
+    def stage_external_of = orthofinder_dir_arg ? """
+    rm -rf ${genespace_wd}/orthofinder
+    cp -r ${orthofinder_dir_arg} ${genespace_wd}/orthofinder
+    """ : ""
 
     """
+    ${stage_external_of}
+
     Rscript --vanilla ${run_genespace_script} \
       --genespace-wd ${genespace_wd} \
-      ${of_arg} \
       ${raw_of_arg} \
       --genomes-tsv ${genomes_tsv} \
       --blk-size ${params.genespace.blkSize} \

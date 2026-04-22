@@ -4,6 +4,7 @@ process PANGENES_PASS_FILTER {
     input:
     path genespace_wd
     path genespace_done
+    path genomes_tsv
     path pangenes_pass_filter_script
 
     output:
@@ -11,17 +12,54 @@ process PANGENES_PASS_FILTER {
     path("${params.postdir}/og_list_min4species.txt")
 
     script:
+    def requireOutgroupArg = params.require_outgroup_og ? "--require-outgroup" : ""
     """
     mkdir -p ${params.postdir}
 
     python ${pangenes_pass_filter_script} \
       --genespace-wd ${genespace_wd} \
+      --genomes-tsv ${genomes_tsv} \
       --out-tsv ${params.postdir}/pangenes_PASS.tsv \
       --out-og-list ${params.postdir}/og_list_min4species.txt \
+      ${requireOutgroupArg} \
       > pangenes_pass_filter.log 2>&1
 
     test -s ${params.postdir}/pangenes_PASS.tsv
     test -s ${params.postdir}/og_list_min4species.txt
+    """
+}
+
+process COLLAPSE_TANDEMS {
+    tag "collapse_tandems"
+
+    input:
+    path pass_tsv
+    path genomes_tsv
+    path collapse_tandems_script
+
+    output:
+    path("${params.postdir}/pangenes_PASS.collapsed.tsv")
+    path("${params.postdir}/tandem_report.tsv")
+    path("${params.postdir}/og_list_min4species.collapsed.txt")
+
+    script:
+    def requireOutgroupArg = params.require_outgroup_og ? "--require-outgroup" : ""
+    """
+    mkdir -p ${params.postdir}
+
+    python ${collapse_tandems_script} \
+      --infile ${pass_tsv} \
+      --genomes-tsv ${genomes_tsv} \
+      --outfile_filtered ${params.postdir}/pangenes_PASS.collapsed.tsv \
+      --outfile_tandems ${params.postdir}/tandem_report.tsv \
+      --outfile_og_list ${params.postdir}/og_list_min4species.collapsed.txt \
+      --max_ord_gap ${params.tandem_max_ord_gap} \
+      ${requireOutgroupArg} \
+      > collapse_tandems.log 2>&1
+
+    test -s ${params.postdir}/pangenes_PASS.collapsed.tsv
+    test -s ${params.postdir}/tandem_report.tsv
+    test -s ${params.postdir}/og_list_min4species.collapsed.txt
     """
 }
 
@@ -37,11 +75,12 @@ process WRITE_OG_FASTAS {
 
     output:
     path("${params.postdir}/og_fasta")
-    path("${params.postdir}/og_list_min4species.txt")
+    path("${params.postdir}/*min4species*.txt")
     path("${params.postdir}/og_fastas.done")
 
     script:
     def cdsList = cds_files.collect { "\"${it}\"" }.join(' ')
+    def ogListOut = "${params.postdir}/${og_list.getFileName()}"
     """
     mkdir -p ${params.postdir}/og_fasta
     mkdir -p cds
@@ -55,11 +94,11 @@ process WRITE_OG_FASTAS {
       --genomes-tsv ${genomes_tsv} \
       --cds-dir cds \
       --outdir ${params.postdir}/og_fasta \
-      --og-list ${params.postdir}/og_list_min4species.txt \
+      --og-list ${ogListOut} \
       > write_og_fastas.log 2>&1
 
-    find ${params.postdir}/og_fasta -maxdepth 1 -name 'og_*.fasta' | grep -q .
-    test -s ${params.postdir}/og_list_min4species.txt
+    compgen -G "${params.postdir}/og_fasta/og_*.fasta" > /dev/null
+    test -s ${ogListOut}
     touch ${params.postdir}/og_fastas.done
     """
 }
@@ -154,6 +193,7 @@ process MACSE_REPORT {
 
 process IQTREE_OG {
     tag { "og_${og}" }
+    array (params.array_size as int)
 
     input:
     tuple val(og), path(aa), path(nt), path(status)
@@ -199,9 +239,9 @@ process IQTREE_OG {
     fi
 
     set +e
-    iqtree \
+    ${params.iqtree_bin} \
       -s ${nt} \
-      -nt 1 \
+      -T ${task.cpus} \
       -m MFP \
       -bb 1000 \
       -wbtl \
@@ -260,6 +300,7 @@ process IQTREE_REPORT {
 
 process WRITE_ALERAX_MAPPING {
     tag { "og_${og}" }
+    array (params.array_size as int)
 
     input:
     tuple val(og), path(treefile), path(ufboot), path(status), path(nt)
@@ -350,7 +391,7 @@ process RUN_ALERAX {
 
     input:
     path families
-    path species_tree
+    val species_tree_arg
 
     output:
     path("${params.postdir}/alerax/output")
@@ -360,10 +401,16 @@ process RUN_ALERAX {
     script:
     """
     mkdir -p ${params.postdir}/alerax/output
+    mkdir -p mpi_tmp
 
-    mpiexec -np ${task.cpus} ${params.alerax_bin} \
+    export TMPDIR="\$PWD/mpi_tmp"
+    export TEMP="\$PWD/mpi_tmp"
+    export TMP="\$PWD/mpi_tmp"
+    export OMPI_MCA_orte_tmpdir_base="\$PWD/mpi_tmp"
+
+    mpiexec --mca orte_tmpdir_base "\$PWD/mpi_tmp" -np ${task.cpus} ${params.alerax_bin} \
       -f ${families} \
-      -s ${species_tree} \
+      -s ${species_tree_arg} \
       -p ${params.postdir}/alerax/output \
       -r ${params.alerax.rec_model} \
       --model-parametrization ${params.alerax.model_parametrization} \
