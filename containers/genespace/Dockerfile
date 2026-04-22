@@ -27,6 +27,7 @@ RUN conda create -y -n genespace --override-channels \
     r-dplyr \
     r-readr \
     r-data.table \
+    r-stringr \
     xz \
     && conda clean --all --yes
 
