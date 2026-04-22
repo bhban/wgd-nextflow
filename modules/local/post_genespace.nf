@@ -401,8 +401,14 @@ process RUN_ALERAX {
     script:
     """
     mkdir -p ${params.postdir}/alerax/output
+    mkdir -p mpi_tmp
 
-    mpiexec -np ${task.cpus} ${params.alerax_bin} \
+    export TMPDIR="\$PWD/mpi_tmp"
+    export TEMP="\$PWD/mpi_tmp"
+    export TMP="\$PWD/mpi_tmp"
+    export OMPI_MCA_orte_tmpdir_base="\$PWD/mpi_tmp"
+
+    mpiexec --mca orte_tmpdir_base "\$PWD/mpi_tmp" -np ${task.cpus} ${params.alerax_bin} \
       -f ${families} \
       -s ${species_tree_arg} \
       -p ${params.postdir}/alerax/output \
