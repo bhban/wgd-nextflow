@@ -193,6 +193,7 @@ process MACSE_REPORT {
 
 process IQTREE_OG {
     tag { "og_${og}" }
+    array (params.array_size as int)
 
     input:
     tuple val(og), path(aa), path(nt), path(status)
