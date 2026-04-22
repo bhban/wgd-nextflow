@@ -75,11 +75,12 @@ process WRITE_OG_FASTAS {
 
     output:
     path("${params.postdir}/og_fasta")
-    path("${params.postdir}/og_list_min4species.txt")
+    path("${params.postdir}/*min4species*.txt")
     path("${params.postdir}/og_fastas.done")
 
     script:
     def cdsList = cds_files.collect { "\"${it}\"" }.join(' ')
+    def ogListOut = "${params.postdir}/${og_list.getFileName()}"
     """
     mkdir -p ${params.postdir}/og_fasta
     mkdir -p cds
@@ -93,11 +94,11 @@ process WRITE_OG_FASTAS {
       --genomes-tsv ${genomes_tsv} \
       --cds-dir cds \
       --outdir ${params.postdir}/og_fasta \
-      --og-list ${params.postdir}/og_list_min4species.txt \
+      --og-list ${ogListOut} \
       > write_og_fastas.log 2>&1
 
-    find ${params.postdir}/og_fasta -maxdepth 1 -name 'og_*.fasta' | grep -q .
-    test -s ${params.postdir}/og_list_min4species.txt
+    compgen -G "${params.postdir}/og_fasta/og_*.fasta" > /dev/null
+    test -s ${ogListOut}
     touch ${params.postdir}/og_fastas.done
     """
 }
@@ -237,7 +238,7 @@ process IQTREE_OG {
     fi
 
     set +e
-    iqtree \
+    ${params.iqtree_bin} \
       -s ${nt} \
       -nt 1 \
       -m MFP \
