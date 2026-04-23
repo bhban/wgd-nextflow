@@ -1,7 +1,7 @@
 nextflow.enable.dsl=2
 
 include { PRIMARY_TRANSCRIPT; FINALIZE_REPO_IDS } from './modules/local/prep'
-include { STAGE_GENOMEREPO; PARSE_ANNOTATIONS_BY_SOURCE; MAKE_PARSE_DONE; VALIDATE_PARSE_OUTPUTS; ORTHOFINDER_OR_SKIP; RUN_GENESPACE } from './modules/local/genespace'
+include { STAGE_GENOMEREPO; PARSE_ANNOTATIONS_BY_SOURCE; MAKE_PARSE_DONE; VALIDATE_PARSE_OUTPUTS; VALIDATE_GENESPACE_RESULTS; ORTHOFINDER_OR_SKIP; RUN_GENESPACE } from './modules/local/genespace'
 include { PANGENES_PASS_FILTER; COLLAPSE_TANDEMS; WRITE_OG_FASTAS; MACSE_ALIGN_OG; MACSE_REPORT; IQTREE_OG; IQTREE_REPORT } from './modules/local/post_genespace'
 include { WRITE_ALERAX_MAPPING; WRITE_ALERAX_FAMILIES; WRITE_ALERAX_MANIFEST; RUN_ALERAX; RUN_ALERAX_RANDOM; ALERAX_REPORT } from './modules/local/alerax'
 
@@ -143,7 +143,8 @@ workflow {
     alerax_models_ch = Channel.fromList(alerax_models)
     alerax_models_list_ch = Channel.value(alerax_models)
 
-    def validated_out
+    def validated_out = null
+    def genespace_ready_out
 
     if (params.start_mode == 'full') {
         primary_out = PRIMARY_TRANSCRIPT(
@@ -193,43 +194,54 @@ workflow {
             genome_ids_ch
         )
 
+        } else if (params.start_mode == 'genespace') {
+        if (!params.existing_genespace_wd) {
+            error "When --start_mode genespace is used, --existing_genespace_wd must be provided"
+        }
+
+        existing_wd_ch = Channel.value(file(params.existing_genespace_wd))
+
+        genespace_ready_out = VALIDATE_GENESPACE_RESULTS(existing_wd_ch)
+
     } else {
-        error "Unsupported start_mode: ${params.start_mode}. Use 'full' or 'parsed'."
+        error "Unsupported start_mode: ${params.start_mode}. Use 'full', 'parsed', or 'genespace'."
     }
 
-    def orthofinder_dir_arg
-    def orthofinder_out = null
-    
-    def use_external_orthofinder = (
-        params.run_external_orthofinder ||
-        params.use_species_tree_for_orthofinder
-    )
-    
-    if (params.existing_orthofinder_dir) {
-        orthofinder_dir_arg = params.existing_orthofinder_dir
-    
-    } else if (use_external_orthofinder) {
-        orthofinder_out = ORTHOFINDER_OR_SKIP(
-            validated_out,
-            genome_ids_ch,
-            orthofinder_or_skip_script_ch,
-            orthofinder_species_tree_arg
+    if (params.start_mode != 'genespace') {
+        def orthofinder_dir_arg
+        def orthofinder_out = null
+
+        def use_external_orthofinder = (
+            params.run_external_orthofinder ||
+            params.use_species_tree_for_orthofinder
         )
-        orthofinder_dir_arg = orthofinder_out[0]
-    
-    } else {
-        orthofinder_dir_arg = ''
+
+        if (params.existing_orthofinder_dir) {
+            orthofinder_dir_arg = params.existing_orthofinder_dir
+
+        } else if (use_external_orthofinder) {
+            orthofinder_out = ORTHOFINDER_OR_SKIP(
+                validated_out,
+                genome_ids_ch,
+                orthofinder_or_skip_script_ch,
+                orthofinder_species_tree_arg
+            )
+            orthofinder_dir_arg = orthofinder_out[0]
+
+        } else {
+            orthofinder_dir_arg = ''
+        }
+
+        genespace_ready_out = RUN_GENESPACE(
+            validated_out,
+            orthofinder_dir_arg,
+            genomes_tsv_ch,
+            run_genespace_script_ch
+        )
     }
-    
-    genespace_out = RUN_GENESPACE(
-        validated_out,
-        orthofinder_dir_arg,
-        genomes_tsv_ch,
-        run_genespace_script_ch
-    )
 
     pass_out = PANGENES_PASS_FILTER(
-        genespace_out,
+        genespace_ready_out,
         genomes_tsv_ch,
         pangenes_pass_filter_script_ch
     )
@@ -240,8 +252,8 @@ workflow {
     if (params.collapse_tandems) {
         tandem_out = COLLAPSE_TANDEMS(
             pass_tsv_for_og,
-            genespace_out[0],
-            genespace_out[1],
+            genespace_ready_out[0],
+            genespace_ready_out[1],
             genomes_tsv_ch,
             collapse_tandems_script_ch
         )
