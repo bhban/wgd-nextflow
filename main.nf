@@ -71,14 +71,11 @@ workflow {
     genomes_tsv_ch = Channel.value(file(params.genomes_tsv))
     cds_files_ch   = Channel.fromPath("${params.cds_dir}/*.cds").collect()
 
-    // These are passed as plain values, not path channels
+    // OrthoFinder species tree is passed as a plain value; AleRax species tree is passed later as a path channel
     def orthofinder_species_tree_arg = (
         params.use_species_tree_for_orthofinder && species_tree_path
     ) ? species_tree_path : ""
 
-    def alerax_species_tree_arg = (
-        params.use_species_tree_for_alerax && species_tree_path
-    ) ? species_tree_path : "random"
 
     primary_transcript_script_ch     = Channel.value(file('scripts/primary_transcript.py'))
     apply_chr_dict_script_ch         = Channel.value(file('scripts/apply_chr_dict_to_gff.py'))
