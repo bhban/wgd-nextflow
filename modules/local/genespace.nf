@@ -101,6 +101,27 @@ process VALIDATE_PARSE_OUTPUTS {
     """
 }
 
+process VALIDATE_GENESPACE_RESULTS {
+    tag "validate_genespace_results"
+
+    input:
+    path genespace_wd
+
+    output:
+    path("${genespace_wd.getFileName()}")
+    path("genespace.done")
+
+    script:
+    """
+    test -d ${genespace_wd}
+    test -d ${genespace_wd}/results
+    test -s ${genespace_wd}/results/combBed.txt
+    test -d ${genespace_wd}/pangenes
+
+    touch genespace.done
+    """
+}
+
 process ORTHOFINDER_OR_SKIP {
     tag "orthofinder"
 
