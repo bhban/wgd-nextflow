@@ -90,7 +90,7 @@ def main():
         )
     )
     parser.add_argument("--infile", required=True, help="Input PASS pangenes TSV")
-    parser.add_argument("--combed", required=True, help="Input combBed.txt TSV")
+    parser.add_argument("--combBed", required=True, help="Input combBed.txt TSV")
     parser.add_argument("--genomes-tsv", required=True, help="Input genomes TSV")
     parser.add_argument("--outfile_filtered", required=True, help="Filtered output TSV")
     parser.add_argument("--outfile_tandems", required=True, help="Tandem report TSV")
@@ -103,14 +103,14 @@ def main():
     args = parser.parse_args()
 
     infile = Path(args.infile)
-    combed_file = Path(args.combed)
+    combBed_file = Path(args.combBed)
     genomes_tsv = Path(args.genomes_tsv)
     outfile_filtered = Path(args.outfile_filtered)
     outfile_tandems = Path(args.outfile_tandems)
     outfile_og_list = Path(args.outfile_og_list)
 
     df = pd.read_csv(infile, sep="\t", dtype=str)
-    combed = pd.read_csv(combed_file, sep="\t", dtype=str)
+    combBed = pd.read_csv(combBed_file, sep="\t", dtype=str)
 
     required_pass_cols = ["og", "genome", "chr", "id", "ord"]
     missing_pass = [c for c in required_pass_cols if c not in df.columns]
@@ -119,29 +119,29 @@ def main():
             f"Missing required columns in input PASS TSV: {', '.join(missing_pass)}"
         )
 
-    required_combed_cols = ["id", "genome", "arrayID", "isArrayRep"]
-    missing_combed = [c for c in required_combed_cols if c not in combed.columns]
-    if missing_combed:
+    required_combBed_cols = ["id", "genome", "arrayID", "isArrayRep"]
+    missing_combBed = [c for c in required_combBed_cols if c not in combBed.columns]
+    if missing_combBed:
         raise SystemExit(
-            f"Missing required columns in combBed TSV: {', '.join(missing_combed)}"
+            f"Missing required columns in combBed TSV: {', '.join(missing_combBed)}"
         )
 
     for col in required_pass_cols:
         df[col] = df[col].fillna("").astype(str).str.strip()
 
-    for col in required_combed_cols:
-        combed[col] = combed[col].fillna("").astype(str).str.strip()
+    for col in required_combBed_cols:
+        combBed[col] = combBed[col].fillna("").astype(str).str.strip()
 
     df["ord_num"] = pd.to_numeric(df["ord"], errors="coerce")
 
     input_rows = len(df)
     input_ogs = df["og"].nunique()
 
-    combed_subset = combed[["id", "genome", "arrayID", "isArrayRep"]].drop_duplicates()
+    combBed_subset = combBed[["id", "genome", "arrayID", "isArrayRep"]].drop_duplicates()
 
-    duplicated_keys = combed_subset.duplicated(subset=["id", "genome"], keep=False)
+    duplicated_keys = combBed_subset.duplicated(subset=["id", "genome"], keep=False)
     if duplicated_keys.any():
-        dup_df = combed_subset.loc[duplicated_keys, ["id", "genome"]].drop_duplicates()
+        dup_df = combBed_subset.loc[duplicated_keys, ["id", "genome"]].drop_duplicates()
         example_rows = dup_df.head(10).to_dict(orient="records")
         raise SystemExit(
             "Duplicate id+genome keys found in combBed, cannot merge unambiguously. "
@@ -149,7 +149,7 @@ def main():
         )
 
     df = df.merge(
-        combed_subset,
+        combBed_subset,
         on=["id", "genome"],
         how="left",
         validate="many_to_one"
@@ -299,7 +299,7 @@ def main():
     print("collapse_tandems summary")
     print("--------------------------------------------------")
     print(f"Input PASS file: {infile}")
-    print(f"Input combBed file: {combed_file}")
+    print(f"Input combBed file: {combBed_file}")
     print(f"Input rows: {input_rows}")
     print(f"Input OGs: {input_ogs}")
     print(f"Rows lacking arrayID after merge: {missing_array_info}")
