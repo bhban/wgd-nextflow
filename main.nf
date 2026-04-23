@@ -3,8 +3,9 @@ nextflow.enable.dsl=2
 include { PRIMARY_TRANSCRIPT; FINALIZE_REPO_IDS } from './modules/local/prep'
 include { STAGE_GENOMEREPO; PARSE_ANNOTATIONS_BY_SOURCE; MAKE_PARSE_DONE; VALIDATE_PARSE_OUTPUTS; ORTHOFINDER_OR_SKIP; RUN_GENESPACE } from './modules/local/genespace'
 include { PANGENES_PASS_FILTER; COLLAPSE_TANDEMS; WRITE_OG_FASTAS; MACSE_ALIGN_OG; MACSE_REPORT; IQTREE_OG; IQTREE_REPORT } from './modules/local/post_genespace'
-include { WRITE_ALERAX_MAPPING; WRITE_ALERAX_FAMILIES; RUN_ALERAX; RUN_ALERAX_RANDOM } from './modules/local/alerax'
+include { WRITE_ALERAX_MAPPING; WRITE_ALERAX_FAMILIES; WRITE_ALERAX_MANIFEST; RUN_ALERAX; RUN_ALERAX_RANDOM; ALERAX_REPORT } from './modules/local/alerax'
 
+// Helper functions
 def resolveChrDict(genome) {
     def tsv = file("${params.chr_dict_dir}/${genome}.tsv")
     def bed = file("${params.chr_dict_dir}/${genome}_chr_lengths.bed")
@@ -43,6 +44,53 @@ def readGenomesTable(tsvPath) {
     rows
 }
 
+def validateAleraxModels(models) {
+    if (!(models instanceof List) || models.isEmpty()) {
+        throw new IllegalArgumentException("AleRax models must be a non-empty list")
+    }
+
+    def seen = [] as Set
+
+    models.each { m ->
+        if (!m.model_id) {
+            throw new IllegalArgumentException("Each AleRax model must define model_id")
+        }
+        if (!m.rec_model) {
+            throw new IllegalArgumentException("AleRax model '${m.model_id}' is missing rec_model")
+        }
+        if (!m.model_parametrization) {
+            throw new IllegalArgumentException("AleRax model '${m.model_id}' is missing model_parametrization")
+        }
+        if (m.gene_tree_samples == null) {
+            throw new IllegalArgumentException("AleRax model '${m.model_id}' is missing gene_tree_samples")
+        }
+        if (seen.contains(m.model_id)) {
+            throw new IllegalArgumentException("Duplicate AleRax model_id: ${m.model_id}")
+        }
+        seen << m.model_id
+    }
+
+    models
+}
+
+def resolveAleraxModels() {
+    def models = params.alerax?.models
+
+    if (models) {
+        return validateAleraxModels(models)
+    }
+
+    return validateAleraxModels([
+        [
+            model_id: 'default',
+            rec_model: params.alerax.rec_model,
+            model_parametrization: params.alerax.model_parametrization,
+            gene_tree_samples: params.alerax.gene_tree_samples
+        ]
+    ])
+}
+
+// Workflow
 workflow {
     genomes_rows = readGenomesTable(params.genomes_tsv)
 
