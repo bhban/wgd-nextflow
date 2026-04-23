@@ -139,6 +139,10 @@ workflow {
 
     genome_ids_ch = Channel.value(genomes_rows.collect { it.genome })
 
+    def alerax_models = resolveAleraxModels()
+    alerax_models_ch = Channel.fromList(alerax_models)
+    alerax_models_list_ch = Channel.value(alerax_models)
+
     def validated_out
 
     if (params.start_mode == 'full') {
@@ -296,13 +300,39 @@ workflow {
                 .collect()
         )
 
+        manifest_out = WRITE_ALERAX_MANIFEST(alerax_models_list_ch)
+
         if (params.use_species_tree_for_alerax) {
-            RUN_ALERAX(
-                families_out,
-                Channel.value(file(species_tree_path))
-            )
+            species_tree_ch = Channel.value(file(species_tree_path))
+
+            alerax_in = alerax_models_ch
+                .combine(families_out)
+                .combine(species_tree_ch)
+                .map { model, fam, tree ->
+                    tuple(fam, tree, model)
+                }
+
+            alerax_results_out = RUN_ALERAX(alerax_in)
         } else {
-            RUN_ALERAX_RANDOM(families_out)
+            alerax_in = alerax_models_ch
+                .combine(families_out)
+                .map { model, fam ->
+                    tuple(fam, model)
+                }
+
+            alerax_results_out = RUN_ALERAX_RANDOM(alerax_in)
         }
+
+        alerax_report_inputs = alerax_results_out
+            .map { model_id, output_dir, done_file, log_file ->
+                [output_dir, done_file, log_file]
+            }
+            .flatten()
+            .collect()
+
+        ALERAX_REPORT(
+            alerax_report_inputs,
+            manifest_out
+        )
     }
 }
