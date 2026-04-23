@@ -86,21 +86,53 @@ process WRITE_ALERAX_FAMILIES {
     """
 }
 
-process RUN_ALERAX {
-    tag "alerax"
+process WRITE_ALERAX_MANIFEST {
+    tag "write_alerax_manifest"
 
     input:
-    path families
-    path species_tree
+    val models
 
     output:
-    path("${params.postdir}/alerax/output")
-    path("${params.postdir}/alerax/alerax.done")
-    path("${params.postdir}/post_genespace.done")
+    path("model_manifest.tsv")
 
     script:
+    def lines = models.collect { m ->
+        "${m.model_id}\t${m.rec_model}\t${m.model_parametrization}\t${m.gene_tree_samples}"
+    }.join('\n')
+
     """
-    mkdir -p ${params.postdir}/alerax/output
+    {
+      echo -e "model_id\trec_model\tmodel_parametrization\tgene_tree_samples"
+      cat <<'EOF'
+${lines}
+EOF
+    } > model_manifest.tsv
+
+    test -s model_manifest.tsv
+    """
+}
+
+process RUN_ALERAX {
+    tag { "alerax_${model.model_id}" }
+
+    input:
+    tuple path(families), path(species_tree), val(model)
+
+    output:
+    tuple val(model.model_id),
+          path("alerax/${model.model_id}/output"),
+          path("alerax/${model.model_id}/alerax.done"),
+          path("alerax/${model.model_id}/alerax.log")
+
+    script:
+    def model_id = model.model_id
+    def rec_model = model.rec_model
+    def model_param = model.model_parametrization
+    def gene_tree_samples = model.gene_tree_samples
+    def cleanup = params.alerax.cleanup_output ? "true" : "false"
+
+    """
+    mkdir -p alerax/${model_id}/output
     mkdir -p mpi_tmp
 
     export TMPDIR="\$PWD/mpi_tmp"
@@ -111,32 +143,47 @@ process RUN_ALERAX {
     mpiexec --mca orte_tmpdir_base "\$PWD/mpi_tmp" -np ${task.cpus} ${params.alerax_bin} \
       -f ${families} \
       -s ${species_tree} \
-      -p ${params.postdir}/alerax/output \
-      -r ${params.alerax.rec_model} \
-      --model-parametrization ${params.alerax.model_parametrization} \
-      --gene-tree-samples ${params.alerax.gene_tree_samples} \
-      > alerax.log 2>&1
+      -p alerax/${model_id}/output \
+      -r ${rec_model} \
+      --model-parametrization ${model_param} \
+      --gene-tree-samples ${gene_tree_samples} \
+      > alerax/${model_id}/alerax.log 2>&1
 
-    test -d ${params.postdir}/alerax/output
-    touch ${params.postdir}/alerax/alerax.done
-    touch ${params.postdir}/post_genespace.done
+    test -d alerax/${model_id}/output
+    test -s alerax/${model_id}/alerax.log
+
+    if [ "${cleanup}" = "true" ]; then
+      if [ -s alerax/${model_id}/output/reconciliations/totalSpeciesEventCounts.txt ]; then
+        rm -rf alerax/${model_id}/output/ccps
+        rm -rf alerax/${model_id}/output/reconciliations/all
+      fi
+    fi
+
+    touch alerax/${model_id}/alerax.done
     """
 }
 
 process RUN_ALERAX_RANDOM {
-    tag "alerax"
+    tag { "alerax_${model.model_id}" }
 
     input:
-    path families
+    tuple path(families), val(model)
 
     output:
-    path("${params.postdir}/alerax/output")
-    path("${params.postdir}/alerax/alerax.done")
-    path("${params.postdir}/post_genespace.done")
+    tuple val(model.model_id),
+          path("alerax/${model.model_id}/output"),
+          path("alerax/${model.model_id}/alerax.done"),
+          path("alerax/${model.model_id}/alerax.log")
 
     script:
+    def model_id = model.model_id
+    def rec_model = model.rec_model
+    def model_param = model.model_parametrization
+    def gene_tree_samples = model.gene_tree_samples
+    def cleanup = params.alerax.cleanup_output ? "true" : "false"
+
     """
-    mkdir -p ${params.postdir}/alerax/output
+    mkdir -p alerax/${model_id}/output
     mkdir -p mpi_tmp
 
     export TMPDIR="\$PWD/mpi_tmp"
@@ -147,14 +194,66 @@ process RUN_ALERAX_RANDOM {
     mpiexec --mca orte_tmpdir_base "\$PWD/mpi_tmp" -np ${task.cpus} ${params.alerax_bin} \
       -f ${families} \
       -s random \
-      -p ${params.postdir}/alerax/output \
-      -r ${params.alerax.rec_model} \
-      --model-parametrization ${params.alerax.model_parametrization} \
-      --gene-tree-samples ${params.alerax.gene_tree_samples} \
-      > alerax.log 2>&1
+      -p alerax/${model_id}/output \
+      -r ${rec_model} \
+      --model-parametrization ${model_param} \
+      --gene-tree-samples ${gene_tree_samples} \
+      > alerax/${model_id}/alerax.log 2>&1
 
-    test -d ${params.postdir}/alerax/output
-    touch ${params.postdir}/alerax/alerax.done
-    touch ${params.postdir}/post_genespace.done
+    test -d alerax/${model_id}/output
+    test -s alerax/${model_id}/alerax.log
+
+    if [ "${cleanup}" = "true" ]; then
+      if [ -s alerax/${model_id}/output/reconciliations/totalSpeciesEventCounts.txt ]; then
+        rm -rf alerax/${model_id}/output/ccps
+        rm -rf alerax/${model_id}/output/reconciliations/all
+      fi
+    fi
+
+    touch alerax/${model_id}/alerax.done
+    """
+}
+
+process ALERAX_REPORT {
+    tag "alerax_report"
+
+    input:
+    path alerax_results
+    path model_manifest
+
+    output:
+    path("${params.postdir}/alerax_report.tsv")
+    path("${params.postdir}/alerax.done")
+
+    script:
+    """
+    mkdir -p ${params.postdir}
+
+    cp ${model_manifest} model_manifest.tsv
+
+    {
+      echo -e "model_id\trec_model\tmodel_parametrization\tgene_tree_samples\tstatus\tresult_dir\tlog_file"
+      for d in alerax/*; do
+        [ -d "\$d" ] || continue
+        model_id=\$(basename "\$d")
+
+        status="FAIL"
+        [ -s "\$d/alerax.done" ] && status="OK"
+
+        rec_model=\$(awk -F'\\t' -v id="\$model_id" 'NR>1 && \$1==id {print \$2}' model_manifest.tsv)
+        model_param=\$(awk -F'\\t' -v id="\$model_id" 'NR>1 && \$1==id {print \$3}' model_manifest.tsv)
+        gts=\$(awk -F'\\t' -v id="\$model_id" 'NR>1 && \$1==id {print \$4}' model_manifest.tsv)
+
+        result_dir=""
+        [ -d "\$d/output" ] && result_dir=\$(realpath "\$d/output")
+
+        log_file=""
+        [ -s "\$d/alerax.log" ] && log_file=\$(realpath "\$d/alerax.log")
+
+        echo -e "\${model_id}\t\${rec_model}\t\${model_param}\t\${gts}\t\${status}\t\${result_dir}\t\${log_file}"
+      done | sort -k1,1
+    } > ${params.postdir}/alerax_report.tsv
+
+    touch ${params.postdir}/alerax.done
     """
 }
