@@ -32,7 +32,6 @@ genespace:
 
 require_outgroup_og: true
 collapse_tandems: true
-tandem_max_ord_gap: 2
 
 array_size: 10000
 
@@ -46,7 +45,28 @@ species_tree: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/species_tre
 use_species_tree_for_orthofinder: true
 use_species_tree_for_alerax: true
 
+run_alerax: true
+
 alerax:
-  rec_model: "UndatedDL"
-  model_parametrization: "PER-SPECIES"
-  gene_tree_samples: 10
+  cleanup_output: true
+
+  models:
+    - model_id: "DL_global"
+      rec_model: "UndatedDL"
+      model_parametrization: "GLOBAL"
+      gene_tree_samples: 10
+
+    - model_id: "DL_perSpecies"
+      rec_model: "UndatedDL"
+      model_parametrization: "PER-SPECIES"
+      gene_tree_samples: 10
+
+    - model_id: "DTL_global"
+      rec_model: "UndatedDTL"
+      model_parametrization: "GLOBAL"
+      gene_tree_samples: 10
+
+    - model_id: "DTL_perSpecies"
+      rec_model: "UndatedDTL"
+      model_parametrization: "PER-SPECIES"
+      gene_tree_samples: 10
