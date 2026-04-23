@@ -4,7 +4,6 @@ suppressPackageStartupMessages({
   library(optparse)
   library(readr)
   library(dplyr)
-  library(stringr)
   library(GENESPACE)
 })
 
@@ -62,8 +61,12 @@ run_one <- function(sub, ..., label) {
 }
 
 get_attr <- function(x, key) {
-  out <- str_match(x, paste0("(?:^|;)", key, "=([^;]+)"))[, 2]
-  out
+  pattern <- paste0("(?:^|;)", key, "=([^;]+)")
+  m <- regexec(pattern, x)
+  hits <- regmatches(x, m)
+  vapply(hits, function(z) {
+    if (length(z) >= 2) z[2] else NA_character_
+  }, character(1))
 }
 
 fix_ncbi_bed_one_genome <- function(genome_id, raw_genomerepo, genespace_wd, bed_start_zero_based = TRUE) {
