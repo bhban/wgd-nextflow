@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+# Adapted from Emily Haley's filterTandemDups.py
+# Now uses  arrayID and isArrayRepfrom GENESPACE's results/combBed.txt to collapse tandem arrays if possible
+
 import argparse
 from pathlib import Path
 import pandas as pd
@@ -39,21 +42,59 @@ def load_outgroup_genomes(genomes_tsv: Path, require_outgroup: bool) -> set[str]
     }
 
 
+def normalize_bool_str(value: str) -> str:
+    v = str(value).strip().upper()
+    if v in {"TRUE", "T", "1", "YES"}:
+        return "TRUE"
+    if v in {"FALSE", "F", "0", "NO"}:
+        return "FALSE"
+    return ""
+
+
+def choose_kept_row(cluster: pd.DataFrame) -> tuple[pd.Series, str, int]:
+    """
+    Choose the representative row for one collapsed tandem cluster.
+
+    Priority:
+    1. Keep a row with isArrayRep == TRUE
+    2. If multiple TRUE rows, choose the one with lowest ord_num then id
+    3. If no TRUE rows, fall back to the row with lowest ord_num then id
+
+    Returns:
+        kept_row, selection_method, n_true_reps
+    """
+    cluster = cluster.sort_values(["ord_num", "id"], na_position="last").copy()
+    true_rep_mask = cluster["isArrayRep_norm"] == "TRUE"
+    true_reps = cluster.loc[true_rep_mask].copy()
+    n_true_reps = len(true_reps)
+
+    if n_true_reps >= 1:
+        kept = true_reps.sort_values(["ord_num", "id"], na_position="last").iloc[0]
+        if n_true_reps == 1:
+            selection_method = "isArrayRep_TRUE"
+        else:
+            selection_method = "multiple_TRUE_lowest_ord"
+    else:
+        kept = cluster.iloc[0]
+        selection_method = "fallback_lowest_ord"
+
+    return kept, selection_method, n_true_reps
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Collapse tandem duplicates, rewrite the filtered TSV, and regenerate the OG list."
+        description=(
+            "Collapse tandem duplicates using tandem array IDs from combBed, "
+            "choose array representatives using isArrayRep == TRUE where available, "
+            "rewrite the filtered TSV, and regenerate the OG list."
+        )
     )
     parser.add_argument("--infile", required=True, help="Input PASS pangenes TSV")
+    parser.add_argument("--combed", required=True, help="Input combBed.txt TSV")
     parser.add_argument("--genomes-tsv", required=True, help="Input genomes TSV")
     parser.add_argument("--outfile_filtered", required=True, help="Filtered output TSV")
     parser.add_argument("--outfile_tandems", required=True, help="Tandem report TSV")
     parser.add_argument("--outfile_og_list", required=True, help="Rewritten OG list")
-    parser.add_argument(
-        "--max_ord_gap",
-        type=int,
-        default=1,
-        help="Maximum allowed difference in ord values to define a tandem cluster (default: 1)"
-    )
     parser.add_argument(
         "--require-outgroup",
         action="store_true",
@@ -62,84 +103,120 @@ def main():
     args = parser.parse_args()
 
     infile = Path(args.infile)
+    combed_file = Path(args.combed)
     genomes_tsv = Path(args.genomes_tsv)
     outfile_filtered = Path(args.outfile_filtered)
     outfile_tandems = Path(args.outfile_tandems)
     outfile_og_list = Path(args.outfile_og_list)
 
     df = pd.read_csv(infile, sep="\t", dtype=str)
+    combed = pd.read_csv(combed_file, sep="\t", dtype=str)
 
-    required_cols = ["og", "genome", "chr", "id", "ord"]
-    missing = [c for c in required_cols if c not in df.columns]
-    if missing:
-        raise SystemExit(f"Missing required columns in input TSV: {', '.join(missing)}")
+    required_pass_cols = ["og", "genome", "chr", "id", "ord"]
+    missing_pass = [c for c in required_pass_cols if c not in df.columns]
+    if missing_pass:
+        raise SystemExit(
+            f"Missing required columns in input PASS TSV: {', '.join(missing_pass)}"
+        )
 
-    for col in required_cols:
+    required_combed_cols = ["id", "genome", "arrayID", "isArrayRep"]
+    missing_combed = [c for c in required_combed_cols if c not in combed.columns]
+    if missing_combed:
+        raise SystemExit(
+            f"Missing required columns in combBed TSV: {', '.join(missing_combed)}"
+        )
+
+    for col in required_pass_cols:
         df[col] = df[col].fillna("").astype(str).str.strip()
+
+    for col in required_combed_cols:
+        combed[col] = combed[col].fillna("").astype(str).str.strip()
 
     df["ord_num"] = pd.to_numeric(df["ord"], errors="coerce")
 
     input_rows = len(df)
     input_ogs = df["og"].nunique()
 
+    combed_subset = combed[["id", "genome", "arrayID", "isArrayRep"]].drop_duplicates()
+
+    duplicated_keys = combed_subset.duplicated(subset=["id", "genome"], keep=False)
+    if duplicated_keys.any():
+        dup_df = combed_subset.loc[duplicated_keys, ["id", "genome"]].drop_duplicates()
+        example_rows = dup_df.head(10).to_dict(orient="records")
+        raise SystemExit(
+            "Duplicate id+genome keys found in combBed, cannot merge unambiguously. "
+            f"Example duplicate keys: {example_rows}"
+        )
+
+    df = df.merge(
+        combed_subset,
+        on=["id", "genome"],
+        how="left",
+        validate="many_to_one"
+    )
+
+    missing_array_info = df["arrayID"].isna().sum()
+    missing_rep_info = df["isArrayRep"].isna().sum()
+
+    df["arrayID"] = df["arrayID"].fillna("").astype(str).str.strip()
+    df["isArrayRep"] = df["isArrayRep"].fillna("").astype(str).str.strip()
+    df["isArrayRep_norm"] = df["isArrayRep"].map(normalize_bool_str)
+
     kept_rows = []
     tandem_records = []
 
+    n_clusters_using_true_rep = 0
+    n_clusters_multiple_true = 0
+    n_clusters_fallback = 0
+
     for (og, genome, chr_id), subdf in df.groupby(["og", "genome", "chr"], sort=False):
-        subdf = subdf.sort_values("ord_num")
+        subdf = subdf.sort_values(["ord_num", "id"], na_position="last").copy()
 
-        if len(subdf) == 1:
-            kept_rows.append(subdf.iloc[0])
-            continue
+        subdf["collapse_key"] = subdf["arrayID"]
+        no_array_mask = subdf["collapse_key"] == ""
+        subdf.loc[no_array_mask, "collapse_key"] = (
+            "__singleton__" + subdf.loc[no_array_mask, "id"]
+        )
 
-        cluster = [subdf.iloc[0]]
+        for collapse_key, cluster in subdf.groupby("collapse_key", sort=False):
+            cluster = cluster.sort_values(["ord_num", "id"], na_position="last").copy()
 
-        for i in range(1, len(subdf)):
-            prev = cluster[-1]
-            curr = subdf.iloc[i]
+            kept, selection_method, n_true_reps = choose_kept_row(cluster)
+            kept_rows.append(kept)
 
-            same_cluster = (
-                pd.notna(prev["ord_num"]) and
-                pd.notna(curr["ord_num"]) and
-                curr["ord_num"] <= prev["ord_num"] + args.max_ord_gap
+            if selection_method == "isArrayRep_TRUE":
+                n_clusters_using_true_rep += 1
+            elif selection_method == "multiple_TRUE_lowest_ord":
+                n_clusters_multiple_true += 1
+            elif selection_method == "fallback_lowest_ord":
+                n_clusters_fallback += 1
+
+            is_real_array = (
+                pd.notna(kept["arrayID"]) and
+                str(kept["arrayID"]).strip() != ""
             )
 
-            if same_cluster:
-                cluster.append(curr)
-            else:
-                kept = cluster[0]
-                kept_rows.append(kept)
+            if is_real_array and len(cluster) > 1:
+                removed = cluster.loc[cluster["id"] != kept["id"], "id"].tolist()
 
-                if len(cluster) > 1:
-                    removed = [row["id"] for row in cluster[1:]]
-                    tandem_records.append({
-                        "og": og,
-                        "genome": genome,
-                        "chr": chr_id,
-                        "kept_gene": kept["id"],
-                        "removed_genes": ",".join(removed),
-                        "cluster_size": len(cluster),
-                        "n_removed": len(cluster) - 1
-                    })
+                tandem_records.append({
+                    "og": og,
+                    "genome": genome,
+                    "chr": chr_id,
+                    "arrayID": kept["arrayID"],
+                    "kept_gene": kept["id"],
+                    "kept_isArrayRep": kept["isArrayRep"],
+                    "selection_method": selection_method,
+                    "n_true_reps_in_cluster": n_true_reps,
+                    "removed_genes": ",".join(removed),
+                    "cluster_size": len(cluster),
+                    "n_removed": len(cluster) - 1
+                })
 
-                cluster = [curr]
-
-        kept = cluster[0]
-        kept_rows.append(kept)
-
-        if len(cluster) > 1:
-            removed = [row["id"] for row in cluster[1:]]
-            tandem_records.append({
-                "og": og,
-                "genome": genome,
-                "chr": chr_id,
-                "kept_gene": kept["id"],
-                "removed_genes": ",".join(removed),
-                "cluster_size": len(cluster),
-                "n_removed": len(cluster) - 1
-            })
-
-    collapsed_df = pd.DataFrame(kept_rows).drop(columns=["ord_num"], errors="ignore")
+    collapsed_df = pd.DataFrame(kept_rows).drop(
+        columns=["ord_num", "collapse_key", "isArrayRep_norm"],
+        errors="ignore"
+    )
     tandem_df = pd.DataFrame(tandem_records)
 
     rows_after_collapse = len(collapsed_df)
@@ -208,7 +285,12 @@ def main():
 
     if tandem_df.empty:
         pd.DataFrame(
-            columns=["og", "genome", "chr", "kept_gene", "removed_genes", "cluster_size", "n_removed"]
+            columns=[
+                "og", "genome", "chr", "arrayID",
+                "kept_gene", "kept_isArrayRep", "selection_method",
+                "n_true_reps_in_cluster", "removed_genes",
+                "cluster_size", "n_removed"
+            ]
         ).to_csv(outfile_tandems, sep="\t", index=False)
     else:
         tandem_df.to_csv(outfile_tandems, sep="\t", index=False)
@@ -216,10 +298,12 @@ def main():
     print("--------------------------------------------------")
     print("collapse_tandems summary")
     print("--------------------------------------------------")
-    print(f"Input file: {infile}")
+    print(f"Input PASS file: {infile}")
+    print(f"Input combBed file: {combed_file}")
     print(f"Input rows: {input_rows}")
     print(f"Input OGs: {input_ogs}")
-    print(f"Max ord gap used: {args.max_ord_gap}")
+    print(f"Rows lacking arrayID after merge: {missing_array_info}")
+    print(f"Rows lacking isArrayRep after merge: {missing_rep_info}")
     print(f"Outgroup requirement enabled: {'yes' if args.require_outgroup else 'no'}")
     if args.require_outgroup:
         print(f"Outgroup genomes loaded: {len(outgroup_genomes)}")
@@ -228,6 +312,10 @@ def main():
     print(f"OGs after tandem collapse: {ogs_after_collapse}")
     print(f"Tandem clusters found: {tandem_clusters_found}")
     print(f"Rows removed by tandem collapse: {rows_removed_by_tandem}")
+    print("--------------------------------------------------")
+    print(f"Clusters kept via single TRUE array rep: {n_clusters_using_true_rep}")
+    print(f"Clusters with multiple TRUE reps, resolved by ord: {n_clusters_multiple_true}")
+    print(f"Clusters with no TRUE rep, fell back to ord: {n_clusters_fallback}")
     print("--------------------------------------------------")
     print(f"Final rows after OG re-filtering: {final_rows}")
     print(f"Final OGs retained: {final_ogs}")
