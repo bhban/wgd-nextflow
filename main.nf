@@ -190,6 +190,8 @@ workflow {
     if (params.collapse_tandems) {
         tandem_out = COLLAPSE_TANDEMS(
             pass_tsv_for_og,
+            genespace_out[0],
+            genespace_out[1],
             genomes_tsv_ch,
             collapse_tandems_script_ch
         )
