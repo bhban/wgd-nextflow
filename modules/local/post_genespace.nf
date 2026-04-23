@@ -34,6 +34,8 @@ process COLLAPSE_TANDEMS {
 
     input:
     path pass_tsv
+    path genespace_wd
+    path genespace_done
     path genomes_tsv
     path collapse_tandems_script
 
@@ -47,13 +49,15 @@ process COLLAPSE_TANDEMS {
     """
     mkdir -p ${params.postdir}
 
+    test -s ${genespace_wd}/results/combBed.txt
+
     python ${collapse_tandems_script} \
       --infile ${pass_tsv} \
+      --combBed ${genespace_wd}/results/combBed.txt \
       --genomes-tsv ${genomes_tsv} \
       --outfile_filtered ${params.postdir}/pangenes_PASS.collapsed.tsv \
       --outfile_tandems ${params.postdir}/tandem_report.tsv \
       --outfile_og_list ${params.postdir}/og_list_min4species.collapsed.txt \
-      --max_ord_gap ${params.tandem_max_ord_gap} \
       ${requireOutgroupArg} \
       > collapse_tandems.log 2>&1
 
