@@ -395,7 +395,7 @@ process RUN_ALERAX {
 
     input:
     path families
-    val species_tree_arg
+    path species_tree
 
     output:
     path("${params.postdir}/alerax/output")
@@ -414,7 +414,43 @@ process RUN_ALERAX {
 
     mpiexec --mca orte_tmpdir_base "\$PWD/mpi_tmp" -np ${task.cpus} ${params.alerax_bin} \
       -f ${families} \
-      -s ${species_tree_arg} \
+      -s ${species_tree} \
+      -p ${params.postdir}/alerax/output \
+      -r ${params.alerax.rec_model} \
+      --model-parametrization ${params.alerax.model_parametrization} \
+      --gene-tree-samples ${params.alerax.gene_tree_samples} \
+      > alerax.log 2>&1
+
+    test -d ${params.postdir}/alerax/output
+    touch ${params.postdir}/alerax/alerax.done
+    touch ${params.postdir}/post_genespace.done
+    """
+}
+
+process RUN_ALERAX_RANDOM {
+    tag "alerax"
+
+    input:
+    path families
+
+    output:
+    path("${params.postdir}/alerax/output")
+    path("${params.postdir}/alerax/alerax.done")
+    path("${params.postdir}/post_genespace.done")
+
+    script:
+    """
+    mkdir -p ${params.postdir}/alerax/output
+    mkdir -p mpi_tmp
+
+    export TMPDIR="\$PWD/mpi_tmp"
+    export TEMP="\$PWD/mpi_tmp"
+    export TMP="\$PWD/mpi_tmp"
+    export OMPI_MCA_orte_tmpdir_base="\$PWD/mpi_tmp"
+
+    mpiexec --mca orte_tmpdir_base "\$PWD/mpi_tmp" -np ${task.cpus} ${params.alerax_bin} \
+      -f ${families} \
+      -s random \
       -p ${params.postdir}/alerax/output \
       -r ${params.alerax.rec_model} \
       --model-parametrization ${params.alerax.model_parametrization} \
