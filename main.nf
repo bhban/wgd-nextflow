@@ -2,7 +2,7 @@ nextflow.enable.dsl=2
 
 include { PRIMARY_TRANSCRIPT; FINALIZE_REPO_IDS } from './modules/local/prep'
 include { STAGE_GENOMEREPO; PARSE_ANNOTATIONS_BY_SOURCE; MAKE_PARSE_DONE; VALIDATE_PARSE_OUTPUTS; ORTHOFINDER_OR_SKIP; RUN_GENESPACE } from './modules/local/genespace'
-include { PANGENES_PASS_FILTER; COLLAPSE_TANDEMS; WRITE_OG_FASTAS; MACSE_ALIGN_OG; MACSE_REPORT; IQTREE_OG; IQTREE_REPORT; WRITE_ALERAX_MAPPING; WRITE_ALERAX_FAMILIES; RUN_ALERAX } from './modules/local/post_genespace'
+include { PANGENES_PASS_FILTER; COLLAPSE_TANDEMS; WRITE_OG_FASTAS; MACSE_ALIGN_OG; MACSE_REPORT; IQTREE_OG; IQTREE_REPORT; WRITE_ALERAX_MAPPING; WRITE_ALERAX_FAMILIES; RUN_ALERAX; RUN_ALERAX_RANDOM } from './modules/local/post_genespace'
 
 def resolveChrDict(genome) {
     def tsv = file("${params.chr_dict_dir}/${genome}.tsv")
@@ -249,5 +249,12 @@ workflow {
             .collect()
     )
 
-    RUN_ALERAX(families_out, alerax_species_tree_arg)
+    if (params.use_species_tree_for_alerax) {
+        RUN_ALERAX(
+            families_out,
+            Channel.value(file(species_tree_path))
+        )
+    } else {
+        RUN_ALERAX_RANDOM(families_out)
+    }
 }
