@@ -421,7 +421,7 @@ output {
     }
 
     genespace_wd {
-        path '.'
+        path { wd -> wd >> "${params.working_dir}/" }
     }
 
     post_genespace {
