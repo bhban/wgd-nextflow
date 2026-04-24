@@ -3,7 +3,7 @@ array_size: 10000
 sif_paths:
   genespace: "/mnt/apps/users/ehaley/nf_genespace/genespace_1.1.sif"
   macse: "/mnt/apps/users/ehaley/nf_genespace/macse_1.0.sif"
-  iqtree: "//mnt/apps/users/ehaley/nf_genespace/iqtree_1.0.sif"
+  iqtree: "/mnt/apps/users/ehaley/nf_genespace/iqtree_1.0.sif"
   alerax: "/mnt/apps/users/ehaley/nf_genespace/alerax_1.0.sif"
 
 genomes_tsv: "path/to/genomes.tsv"
