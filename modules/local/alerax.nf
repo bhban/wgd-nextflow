@@ -113,7 +113,6 @@ EOF
 }
 
 process RUN_ALERAX {
-    cache false
     tag { "alerax_${model.model_id}" }
 
     input:
