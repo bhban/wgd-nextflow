@@ -108,20 +108,18 @@ process VALIDATE_GENESPACE_RESULTS {
     path genespace_wd
 
     output:
-    path("${genespace_wd.getFileName()}")
+    path("validated_genespace_wd")
     path("genespace.done")
 
     script:
-    def wd_name = genespace_wd.getFileName()
-
     """
     test -d ${genespace_wd}
     test -d ${genespace_wd}/results
     test -s ${genespace_wd}/results/combBed.txt
     test -d ${genespace_wd}/pangenes
 
-    rm -rf ${wd_name}
-    cp -r ${genespace_wd} ${wd_name}
+    rm -rf validated_genespace_wd
+    cp -r ${genespace_wd} validated_genespace_wd
 
     touch genespace.done
     """
