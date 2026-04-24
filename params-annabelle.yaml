@@ -1,0 +1,64 @@
+array_size: 10000
+
+sif_paths:
+  genespace: "/mnt/apps/users/ehaley/nf_genespace/genespace_1.1.sif"
+  macse: "/mnt/apps/users/ehaley/nf_genespace/macse_1.0.sif"
+  iqtree: "//mnt/apps/users/ehaley/nf_genespace/iqtree_1.0.sif"
+  alerax: "/mnt/apps/users/ehaley/nf_genespace/alerax_1.0.sif"
+
+genomes_tsv: "path/to/genomes.tsv"
+
+start_mode: "full"
+
+working_dir: "workingDir"
+postdir: "post_genespace"
+
+gff_dir: "path/to/gff"
+protein_dir: "path/to/protein"
+cds_dir: "path/to/cds"
+chr_dict_dir: "path/to/chr_dict"
+
+ext:
+  gff: "gff3"
+  pep: "pep"
+
+run_external_orthofinder: true
+force_orthofinder: false
+
+use_species_tree_for_orthofinder: true
+use_species_tree_for_alerax: true
+species_tree: "path/to/species_tree.nwk"
+
+require_outgroup_og: true
+collapse_tandems: true
+run_alerax: true
+cleanup_alerax: true
+
+genespace:
+  rawOrthofinderDir: ""
+  blkSize: 5
+  orthofinder_in_blk: true
+
+alerax:
+  cleanup_output: true
+
+  models:
+    - model_id: "DL_global"
+      rec_model: "UndatedDL"
+      model_parametrization: "GLOBAL"
+      gene_tree_samples: 100
+
+    - model_id: "DL_per_species"
+      rec_model: "UndatedDL"
+      model_parametrization: "PER-SPECIES"
+      gene_tree_samples: 100
+
+    - model_id: "DTL_global"
+      rec_model: "UndatedDTL"
+      model_parametrization: "GLOBAL"
+      gene_tree_samples: 100
+
+    - model_id: "DTL_per_species"
+      rec_model: "UndatedDTL"
+      model_parametrization: "PER-SPECIES"
+      gene_tree_samples: 100
