@@ -224,17 +224,20 @@ process ALERAX_REPORT {
     mkdir -p ${params.postdir}
 
     {
-      echo -e "model_id\trec_model\tmodel_parametrization\tgene_tree_samples\tstatus\tresult_dir\tlog_file"
-      for d in alerax/*; do
+      echo -e "model_id\\trec_model\\tmodel_parametrization\\tgene_tree_samples\\tstatus\\tresult_dir\\tlog_file"
+
+      for d in *; do
         [ -d "\$d" ] || continue
+        [ "\$d" = "${params.postdir}" ] && continue
+
         model_id=\$(basename "\$d")
 
         status="FAIL"
-        [ -s "\$d/alerax.done" ] && status="OK"
+        [ -e "\$d/alerax.done" ] && status="OK"
 
-        rec_model=\$(awk -F'\\t' -v id="\$model_id" 'NR>1 && \$1==id {print \$2}' model_manifest.tsv)
-        model_param=\$(awk -F'\\t' -v id="\$model_id" 'NR>1 && \$1==id {print \$3}' model_manifest.tsv)
-        gts=\$(awk -F'\\t' -v id="\$model_id" 'NR>1 && \$1==id {print \$4}' model_manifest.tsv)
+        rec_model=\$(awk -F'\\t' -v id="\$model_id" 'NR>1 && \$1==id {print \$2}' ${model_manifest})
+        model_param=\$(awk -F'\\t' -v id="\$model_id" 'NR>1 && \$1==id {print \$3}' ${model_manifest})
+        gts=\$(awk -F'\\t' -v id="\$model_id" 'NR>1 && \$1==id {print \$4}' ${model_manifest})
 
         result_dir=""
         [ -d "\$d/output" ] && result_dir=\$(realpath "\$d/output")
@@ -242,7 +245,7 @@ process ALERAX_REPORT {
         log_file=""
         [ -s "\$d/alerax.log" ] && log_file=\$(realpath "\$d/alerax.log")
 
-        echo -e "\${model_id}\t\${rec_model}\t\${model_param}\t\${gts}\t\${status}\t\${result_dir}\t\${log_file}"
+        echo -e "\${model_id}\\t\${rec_model}\\t\${model_param}\\t\${gts}\\t\${status}\\t\${result_dir}\\t\${log_file}"
       done | sort -k1,1
     } > ${params.postdir}/alerax_report.tsv
 
