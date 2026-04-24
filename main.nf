@@ -1,5 +1,6 @@
 nextflow.enable.dsl=2
 
+include { RUN_ANNEVO; ANNEVO_GFF_TO_FASTA } from './modules/local/annotation'
 include { PRIMARY_TRANSCRIPT; FINALIZE_REPO_IDS } from './modules/local/prep'
 include { STAGE_GENOMEREPO; PARSE_ANNOTATIONS_BY_SOURCE; MAKE_PARSE_DONE; VALIDATE_PARSE_OUTPUTS; VALIDATE_GENESPACE_RESULTS; ORTHOFINDER_OR_SKIP; RUN_GENESPACE } from './modules/local/genespace'
 include { PANGENES_PASS_FILTER; COLLAPSE_TANDEMS; WRITE_OG_FASTAS; MACSE_ALIGN_OG; MACSE_REPORT; IQTREE_OG; IQTREE_REPORT } from './modules/local/post_genespace'
@@ -12,6 +13,12 @@ def resolveChrDict(genome) {
     if (tsv.exists()) return tsv
     if (bed.exists()) return bed
     throw new IllegalArgumentException("No chr_dict found for ${genome}: expected ${tsv} or ${bed}")
+}
+
+def resolveGenomeFasta(genome) {
+    def fasta = file("${params.fasta_dir}/${genome}.${params.ext.fasta}")
+    if (fasta.exists()) return fasta
+    throw new IllegalArgumentException("No genome FASTA found for ${genome}: expected ${fasta}")
 }
 
 def readGenomesTable(tsvPath) {
@@ -118,7 +125,8 @@ workflow {
                 row.ploidy,
                 file("${params.gff_dir}/${row.genome}.${params.ext.gff}"),
                 file("${params.protein_dir}/${row.genome}.${params.ext.pep}"),
-                resolveChrDict(row.genome)
+                resolveChrDict(row.genome),
+                resolveGenomeFasta(row.genome)
             )
         }
 
@@ -150,8 +158,39 @@ workflow {
     def genespace_ready_out
 
     if (params.start_mode == 'full') {
+        def prep_input_ch
+
+        if (params.annotation?.run) {
+            if (params.annotation.tool != 'annevo') {
+                error "Unsupported annotation tool: ${params.annotation.tool}. Currently supported: annevo"
+            }
+
+            annevo_input_ch = genomes_ch.map { genome, source, ploidy, gff, pep, chr, fasta ->
+                tuple(genome, source, ploidy, fasta, chr)
+            }
+
+            annevo_gff_out = RUN_ANNEVO(annevo_input_ch)
+
+            annevo_fasta_out = ANNEVO_GFF_TO_FASTA(annevo_gff_out)
+
+            annevo_fasta_out = ANNEVO_GFF_TO_FASTA(annevo_gff_out)
+
+            prep_input_ch = annevo_fasta_out.map { genome, source, ploidy, gff, pep, chr, cds ->
+                tuple(genome, source, ploidy, gff, pep, chr)
+            }
+            
+            cds_files_ch = annevo_fasta_out
+                .map { genome, source, ploidy, gff, pep, chr, cds -> cds }
+                .collect()
+
+        } else {
+            prep_input_ch = genomes_ch.map { genome, source, ploidy, gff, pep, chr, fasta ->
+                tuple(genome, source, ploidy, gff, pep, chr)
+            }
+        }
+
         primary_out = PRIMARY_TRANSCRIPT(
-            genomes_ch,
+            prep_input_ch,
             primary_transcript_script_ch
         )
 
