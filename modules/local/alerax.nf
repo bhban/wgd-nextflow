@@ -224,8 +224,6 @@ process ALERAX_REPORT {
     """
     mkdir -p ${params.postdir}
 
-    cp ${model_manifest} model_manifest.tsv
-
     {
       echo -e "model_id\trec_model\tmodel_parametrization\tgene_tree_samples\tstatus\tresult_dir\tlog_file"
       for d in alerax/*; do
