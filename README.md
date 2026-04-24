@@ -74,7 +74,12 @@ old_seqid <TAB> new_seqid
 Style B (BED-like):  
 ```
 #chrom <TAB> start <TAB> end <TAB> name
+
+#chrom <TAB> chromStart <TAB> chromEnd <TAB> name chr1 0 88077321 1 NC_... 0 9953 NC_...
 ```
+For Style B, interpret mapping as: 
+old_seqid = column 4 (name) 
+new_seqid = column 1 (#chrom)
 
 ---
 
