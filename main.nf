@@ -92,6 +92,11 @@ def resolveAleraxModels() {
 
 // Workflow
 workflow {
+    main:
+    genome_repo_publish_ch = Channel.empty()
+    genespace_publish_ch = Channel.empty()
+    post_outputs_ch = Channel.empty()
+
     genomes_rows = readGenomesTable(params.genomes_tsv)
 
     def species_tree_path = params.species_tree?.toString()?.trim()
@@ -120,11 +125,9 @@ workflow {
     genomes_tsv_ch = Channel.value(file(params.genomes_tsv))
     cds_files_ch   = Channel.fromPath("${params.cds_dir}/*.cds").collect()
 
-    // OrthoFinder species tree is passed as a plain value; AleRax species tree is passed later as a path channel
     def orthofinder_species_tree_arg = (
         params.use_species_tree_for_orthofinder && species_tree_path
     ) ? species_tree_path : ""
-
 
     primary_transcript_script_ch     = Channel.value(file('scripts/primary_transcript.py'))
     apply_chr_dict_script_ch         = Channel.value(file('scripts/apply_chr_dict_to_gff.py'))
@@ -166,6 +169,8 @@ workflow {
                 .collect()
         )
 
+        genome_repo_publish_ch = staged_repo_out
+
         parsed_out = PARSE_ANNOTATIONS_BY_SOURCE(
             staged_repo_out,
             genomes_tsv_ch,
@@ -194,13 +199,12 @@ workflow {
             genome_ids_ch
         )
 
-        } else if (params.start_mode == 'genespace') {
+    } else if (params.start_mode == 'genespace') {
         if (!params.existing_genespace_wd) {
             error "When --start_mode genespace is used, --existing_genespace_wd must be provided"
         }
 
         existing_wd_ch = Channel.value(file(params.existing_genespace_wd))
-
         genespace_ready_out = VALIDATE_GENESPACE_RESULTS(existing_wd_ch)
 
     } else {
@@ -240,11 +244,15 @@ workflow {
         )
     }
 
+    genespace_publish_ch = genespace_ready_out[0]
+
     pass_out = PANGENES_PASS_FILTER(
         genespace_ready_out,
         genomes_tsv_ch,
         pangenes_pass_filter_script_ch
     )
+
+    post_outputs_ch = post_outputs_ch.mix(pass_out)
 
     pass_tsv_for_og = pass_out[0]
     og_list_for_og  = pass_out[1]
@@ -257,6 +265,9 @@ workflow {
             genomes_tsv_ch,
             collapse_tandems_script_ch
         )
+
+        post_outputs_ch = post_outputs_ch.mix(tandem_out)
+
         pass_tsv_for_og = tandem_out[0]
         og_list_for_og  = tandem_out[2]
     }
@@ -268,6 +279,8 @@ workflow {
         cds_files_ch,
         write_og_fastas_script_ch
     )
+
+    post_outputs_ch = post_outputs_ch.mix(og_fastas_out)
 
     og_fasta_ch = og_fastas_out[0]
         .flatMap { og_dir ->
@@ -291,6 +304,8 @@ workflow {
             .collect()
     )
 
+    post_outputs_ch = post_outputs_ch.mix(macse_report_out)
+
     iqtree_in = macse_out.filter { og, aa, nt, status ->
         status.text.trim() == 'OK'
     }
@@ -303,6 +318,8 @@ workflow {
             .collect()
     )
 
+    post_outputs_ch = post_outputs_ch.mix(iqtree_report_out)
+
     if (params.run_alerax) {
         alerax_map_out = WRITE_ALERAX_MAPPING(iqtree_out)
 
@@ -312,7 +329,11 @@ workflow {
                 .collect()
         )
 
+        post_outputs_ch = post_outputs_ch.mix(families_out)
+
         manifest_out = WRITE_ALERAX_MANIFEST(alerax_models_list_ch)
+
+        post_outputs_ch = post_outputs_ch.mix(manifest_out)
 
         if (params.use_species_tree_for_alerax) {
             species_tree_ch = Channel.value(file(species_tree_path))
@@ -335,13 +356,36 @@ workflow {
             alerax_results_out = RUN_ALERAX_RANDOM(alerax_in)
         }
 
+        post_outputs_ch = post_outputs_ch.mix(alerax_results_out)
+
         alerax_report_inputs = alerax_results_out
             .map { model_id, model_dir -> model_dir }
             .collect()
 
-        ALERAX_REPORT(
+        alerax_report_out = ALERAX_REPORT(
             alerax_report_inputs,
             manifest_out
         )
+
+        post_outputs_ch = post_outputs_ch.mix(alerax_report_out)
+    }
+
+    publish:
+    genomeRepo = genome_repo_publish_ch
+    genespace_wd = genespace_publish_ch
+    post_genespace = post_outputs_ch
+}
+
+output {
+    genomeRepo {
+        path 'genomeRepo'
+    }
+
+    genespace_wd {
+        path "${params.working_dir}"
+    }
+
+    post_genespace {
+        path "${params.postdir}"
     }
 }
