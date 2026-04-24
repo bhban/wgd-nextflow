@@ -336,10 +336,7 @@ workflow {
         }
 
         alerax_report_inputs = alerax_results_out
-            .map { model_id, output_dir, done_file, log_file ->
-                [output_dir, done_file, log_file]
-            }
-            .flatten()
+            .map { model_id, model_dir -> model_dir }
             .collect()
 
         ALERAX_REPORT(
