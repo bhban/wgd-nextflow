@@ -9,13 +9,13 @@ A Nextflow pipeline for detecting whole genome duplication (WGD) and downstream 
 This pipeline performs:
 
 1. Genome preprocessing and annotation parsing  
-2. Orthogroup inference (OrthoFinder)  
+2. Orthogroup inference (OrthoFinder; optional)  
 3. Synteny-aware orthogroup construction (GENESPACE)  
 4. Orthogroup filtering  
 5. Optional tandem duplicate collapse  
 6. Per-orthogroup alignment (MACSE)  
 7. Gene tree inference (IQ-TREE)  
-8. Gene tree - species tree reconciliation (AleRax)  
+8. Gene tree - species tree reconciliation (AleRax; optional, multi-model)  
 
 ---
 
@@ -29,27 +29,16 @@ This pipeline performs:
 
 ## Input files
 
-### 1. `genomes.tsv`
+### 1. genomes.tsv
 
 Tab-separated file with required columns:
 
-```
 genome_id    genome_source    ploidy    outgroup
-```
 
-- `genome_id`: must match file names
-- `genome_source`: one of `ncbi`, `ensembl`, `phytozome`, `helixer`
-- `ploidy`: integer (e.g. 2)
-- `outgroup`: `yes` or `no` (optional; defaults to `no`)
-
-Example:
-
-```
-Eric_Calluna_vul    ncbi       2    no
-Sarr_Sarracenia_pur ncbi       2    yes
-Thea_Camellia_fas   ensembl    2    no
-Eben_Diospyros_lot  ensembl    2    no
-```
+- genome_id: must match file names
+- genome_source: one of ncbi, ensembl, phytozome, helixer
+- ploidy: integer (e.g. 2)
+- outgroup: yes or no (optional; defaults to no)
 
 ---
 
@@ -57,11 +46,9 @@ Eben_Diospyros_lot  ensembl    2    no
 
 For each genome:
 
-```
-gff_dir/<genome_id>.gff3
-protein_dir/<genome_id>.pep
-cds_dir/<genome_id>.cds
-```
+gff_dir/<genome_id>.gff3  
+protein_dir/<genome_id>.pep  
+cds_dir/<genome_id>.cds  
 
 ---
 
@@ -69,23 +56,15 @@ cds_dir/<genome_id>.cds
 
 For each genome:
 
-```
-chr_dict_dir/<genome_id>.tsv
-```
- 
-Suports two styles: 
-Style A (2+ columns):
-old_seqid <TAB> new_seqid [<TAB> ...]
-(header optional)
+chr_dict_dir/<genome_id>.tsv  
 
-Style B (chr_lengths.bed / chrom sizes BED-ish):
-#chrom <TAB> chromStart <TAB> chromEnd <TAB> name
-chr1   0   88077321   1
-NC_... 0   9953      NC_...
+Supports two styles:
 
-For Style B, interpret mapping as:
-old_seqid = column 4 (name)
-new_seqid = column 1 (#chrom)
+Style A:  
+old_seqid <TAB> new_seqid  
+
+Style B (BED-like):  
+#chrom <TAB> start <TAB> end <TAB> name  
 
 ---
 
@@ -93,41 +72,45 @@ new_seqid = column 1 (#chrom)
 
 Newick format:
 
-```
 species_tree.nwk
-```
 
-- Required if using species tree with OrthoFinder
-- Must be **rooted** for OrthoFinder
+Required if using species tree with OrthoFinder or AleRax.
 
 ---
 
 ## Running the pipeline
 
-### Basic run
+Basic run:
 
-```
-nextflow run main.nf \
-  -profile eddie \
-  -params-file params.yaml \
-  -with-apptainer
-```
+nextflow run main.nf -profile eddie -params-file params.yaml -with-apptainer
+
+Resume:
+
+nextflow run main.nf -resume
 
 ---
 
-### Resume a failed run
+## Start modes
 
-```
-nextflow run main.nf -resume
-```
+- full: run entire pipeline from raw inputs  
+- parsed: start from parsed GENESPACE inputs  
+- genespace: start from completed GENESPACE working directory  
+
+genespace mode requires:
+
+existing_genespace_wd: "path/to/workingDir"
+
+The pipeline validates that this directory contains:
+- results/
+- results/combBed.txt
+- pangenes/
 
 ---
 
 ## Key parameters
 
-Example `params.yaml`:
+Example params.yaml:
 
-```yaml
 genomes_tsv: "path/to/genomes.tsv"
 
 gff_dir: "path/to/gff"
@@ -145,139 +128,136 @@ run_external_orthofinder: true
 existing_orthofinder_dir: null
 
 species_tree: "path/to/species_tree.nwk"
-use_species_tree_orthofinder: true
-use_species_tree_alerax: true
+use_species_tree_for_orthofinder: true
+use_species_tree_for_alerax: true
 
 require_outgroup_og: true
 collapse_tandems: true
-tandem_max_ord_gap: 2
-```
+
+run_alerax: true
 
 ---
 
-## Pipeline options
+## AleRax (optional, multi-model)
 
-### Start modes
+Enable:
 
-- `full` : run entire pipeline from raw inputs  
-- `parsed` : start from an existing GENESPACE working directory  
+run_alerax: true
+
+Example configuration:
+
+alerax:
+  cleanup_output: true
+
+  models:
+    - model_id: "DL_global"
+      rec_model: "UndatedDL"
+      model_parametrization: "GLOBAL"
+      gene_tree_samples: 100
+
+    - model_id: "DL_perSpecies"
+      rec_model: "UndatedDL"
+      model_parametrization: "PER-SPECIES"
+      gene_tree_samples: 100
+
+    - model_id: "DTL_global"
+      rec_model: "UndatedDTL"
+      model_parametrization: "GLOBAL"
+      gene_tree_samples: 100
+
+    - model_id: "DTL_perSpecies"
+      rec_model: "UndatedDTL"
+      model_parametrization: "PER-SPECIES"
+      gene_tree_samples: 100
+
+Notes:
+- Each model runs independently
+- Outputs are separated by model_id
+- cleanup_output removes large intermediate directories
+
+Disable AleRax:
+
+run_alerax: false
 
 ---
 
-### OrthoFinder
+## Modular execution
 
-- `run_external_orthofinder: true`  
-  Runs OrthoFinder before GENESPACE  
+The pipeline supports starting from intermediate stages:
 
-- `existing_orthofinder_dir`  
-  Use precomputed OrthoFinder results  
+| Mode       | Input required                        |
+|-----------|--------------------------------------|
+| full      | Raw genome inputs                    |
+| parsed    | Parsed GENESPACE inputs              |
+| genespace | Completed GENESPACE working directory|
 
-Both are automatically integrated into GENESPACE.
-
----
-
-### Species tree
-
-Single parameter:
-
-```
-species_tree: path/to/tree.nwk
-```
-
-Controlled by:
-
-- `use_species_tree_orthofinder` → passed to OrthoFinder  
-- `use_species_tree_alerax` → passed to AleRax  
-
-If not used for AleRax, a random tree is generated.
-
----
-
-### Filtering
-
-- `require_outgroup_og: true`  
-  Keep only orthogroups with ≥1 outgroup gene  
-
-- `collapse_tandems: true`  
-  Collapse tandem duplicates prior to alignment  
+This allows:
+- rapid re-running of downstream analyses
+- testing different AleRax models
+- skipping expensive upstream steps
 
 ---
 
 ## Outputs
 
-### GENESPACE output
+GENESPACE output:
 
-```
 workingDir/
   ├── pangenes/
   ├── results/
   ├── riparian/
-```
 
----
+Post-processing output:
 
-### Post-processing output
-
-```
 post_genespace/
   ├── pangenes_PASS.tsv
   ├── og_list_min4species.txt
   ├── og_fasta/
   ├── macse_report.tsv
   ├── iqtree_report.tsv
+
+AleRax output (if enabled):
+
+post_genespace/
   ├── alerax/
-```
+  │   ├── DL_global/
+  │   │   ├── output/
+  │   │   ├── alerax.log
+  │   │   └── alerax.done
+  │   ├── DL_perSpecies/
+  │   ├── DTL_global/
+  │   └── DTL_perSpecies/
+  ├── alerax_report.tsv
 
 ---
 
 ## Common issues
 
-### OrthoFinder error: "Species tree is not rooted"
+OrthoFinder error: species tree not rooted  
+→ Ensure tree is rooted
 
-Ensure your tree is rooted before using it with OrthoFinder.
+GENESPACE rerunning OrthoFinder  
+→ Ensure results are correctly staged
 
----
-
-### GENESPACE re-running OrthoFinder
-
-GENESPACE only detects existing results if they are located at:
-
-```
-workingDir/orthofinder/
-```
-
-This pipeline automatically stages results correctly.
-
----
-
-### Missing files
-
-Check that:
-
-- genome IDs match across all inputs
-- all required files are present
-- file extensions match configuration
+Missing files  
+→ Check filenames and extensions match genome_id
 
 ---
 
 ## Typical workflow
 
-1. Prepare input files  
-2. Set parameters  
-3. Run pipeline  
-4. Resume if needed  
-5. Inspect outputs in `post_genespace/`  
+1. Run full pipeline  
+2. Restart from GENESPACE if needed  
+3. Iterate downstream analyses (e.g. AleRax models)  
 
 ---
 
 ## Citation
 
-If you use this pipeline, please cite:
+Please cite the following tools:
 
 - GENESPACE  
 - OrthoFinder  
 - MACSE  
 - IQ-TREE  
-- AleRax  
-
-(see respective tool documentation)
+- AleRax
