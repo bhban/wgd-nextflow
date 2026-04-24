@@ -100,13 +100,13 @@ Required if using species tree with OrthoFinder or AleRax.
 Basic run:
 
 ```bash
-nextflow run main.nf -profile <profile_name> -params-file params.yaml -with-apptainer
+nextflow run main.nf -profile <profile_name> -params-file params.yaml -with-apptainer -output-dir results
 ```
 
 Resume:
 
 ```bash
-nextflow run main.nf -resume
+nextflow run main.nf -profile <profile_name> -params-file params.yaml -with-apptainer -output-dir results -resume
 ```
 
 ---
