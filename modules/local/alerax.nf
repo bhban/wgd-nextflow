@@ -170,10 +170,7 @@ process RUN_ALERAX_RANDOM {
     tuple path(families), val(model)
 
     output:
-    tuple val(model.model_id),
-          path("alerax/${model.model_id}/output"),
-          path("alerax/${model.model_id}/alerax.done"),
-          path("alerax/${model.model_id}/alerax.log")
+    tuple val(model.model_id), path("alerax/${model.model_id}")
 
     script:
     def model_id = model.model_id
