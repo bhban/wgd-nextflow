@@ -33,7 +33,9 @@ This pipeline performs:
 
 Tab-separated file with required columns:
 
+```
 genome_id    genome_source    ploidy    outgroup
+```
 
 - genome_id: must match file names
 - genome_source: one of ncbi, ensembl, phytozome, helixer
@@ -46,9 +48,11 @@ genome_id    genome_source    ploidy    outgroup
 
 For each genome:
 
+```
 gff_dir/<genome_id>.gff3  
 protein_dir/<genome_id>.pep  
 cds_dir/<genome_id>.cds  
+```
 
 ---
 
@@ -82,11 +86,15 @@ Required if using species tree with OrthoFinder or AleRax.
 
 Basic run:
 
-nextflow run main.nf -profile eddie -params-file params.yaml -with-apptainer
+```bash
+nextflow run main.nf -profile <profile_name> -params-file params.yaml -with-apptainer
+```
 
 Resume:
 
+```bash
 nextflow run main.nf -resume
+```
 
 ---
 
@@ -111,6 +119,7 @@ The pipeline validates that this directory contains:
 
 Example params.yaml:
 
+```yaml
 genomes_tsv: "path/to/genomes.tsv"
 
 gff_dir: "path/to/gff"
@@ -135,6 +144,7 @@ require_outgroup_og: true
 collapse_tandems: true
 
 run_alerax: true
+```
 
 ---
 
@@ -142,13 +152,15 @@ run_alerax: true
 
 Enable:
 
+```yaml
 run_alerax: true
+```
 
 Example configuration:
 
+```yaml
 alerax:
   cleanup_output: true
-
   models:
     - model_id: "DL_global"
       rec_model: "UndatedDL"
@@ -169,6 +181,7 @@ alerax:
       rec_model: "UndatedDTL"
       model_parametrization: "PER-SPECIES"
       gene_tree_samples: 100
+```
 
 Notes:
 - Each model runs independently
@@ -203,9 +216,15 @@ This allows:
 GENESPACE output:
 
 workingDir/
+  ├── bed/
+  ├── dotplots/
+  ├── orthofinder/
   ├── pangenes/
+  ├── peptide/
   ├── results/
   ├── riparian/
+  ├── syntenicHits/
+  ├── tmp/
 
 Post-processing output:
 
@@ -237,7 +256,7 @@ OrthoFinder error: species tree not rooted
 → Ensure tree is rooted
 
 GENESPACE rerunning OrthoFinder  
-→ Ensure results are correctly staged
+→ Ensure results are correctly staged into the working directory
 
 Missing files  
 → Check filenames and extensions match genome_id
