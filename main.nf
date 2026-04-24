@@ -417,14 +417,14 @@ workflow {
 
 output {
     genomeRepo {
-        path 'genomeRepo'
+        path '.'
     }
 
     genespace_wd {
-        path "${params.working_dir}"
+        path '.'
     }
 
     post_genespace {
-        path "${params.postdir}"
+        path '.'
     }
 }
