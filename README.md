@@ -60,15 +60,21 @@ cds_dir/<genome_id>.cds
 
 For each genome:
 
+```
 chr_dict_dir/<genome_id>.tsv  
+```
 
 Supports two styles:
 
 Style A:  
-old_seqid <TAB> new_seqid  
+```
+old_seqid <TAB> new_seqid
+```
 
 Style B (BED-like):  
-#chrom <TAB> start <TAB> end <TAB> name  
+```
+#chrom <TAB> start <TAB> end <TAB> name
+```
 
 ---
 
@@ -76,7 +82,9 @@ Style B (BED-like):
 
 Newick format:
 
+```
 species_tree.nwk
+```
 
 Required if using species tree with OrthoFinder or AleRax.
 
@@ -190,7 +198,9 @@ Notes:
 
 Disable AleRax:
 
+```
 run_alerax: false
+````
 
 ---
 
@@ -215,6 +225,7 @@ This allows:
 
 GENESPACE output:
 
+```
 workingDir/
   ├── bed/
   ├── dotplots/
@@ -225,18 +236,22 @@ workingDir/
   ├── riparian/
   ├── syntenicHits/
   ├── tmp/
+```
 
 Post-processing output:
 
+```
 post_genespace/
   ├── pangenes_PASS.tsv
   ├── og_list_min4species.txt
   ├── og_fasta/
   ├── macse_report.tsv
   ├── iqtree_report.tsv
+```
 
 AleRax output (if enabled):
 
+```
 post_genespace/
   ├── alerax/
   │   ├── DL_global/
@@ -247,6 +262,7 @@ post_genespace/
   │   ├── DTL_global/
   │   └── DTL_perSpecies/
   ├── alerax_report.tsv
+```
 
 ---
 
