@@ -64,6 +64,8 @@ For each genome:
 chr_dict_dir/<genome_id>.tsv  
 ```
 
+Used to rename chromosomes for plotting purposes. Recommended that your new seqid be short and consistent (e.g., chr#)
+
 Supports two styles:
 
 Style A:  
@@ -75,7 +77,9 @@ Style B (BED-like):
 ```
 #chrom <TAB> start <TAB> end <TAB> name
 
-#chrom <TAB> chromStart <TAB> chromEnd <TAB> name chr1 0 88077321 1 NC_... 0 9953 NC_...
+#chrom <TAB> chromStart <TAB> chromEnd <TAB>
+name  chr1  0  88077321  1
+NC_...  0  9953  NC_...
 ```
 For Style B, interpret mapping as: 
 old_seqid = column 4 (name) 
