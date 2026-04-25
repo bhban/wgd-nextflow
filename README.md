@@ -27,11 +27,11 @@ This pipeline performs:
 
 ---
 
-Optional: Pre-pull containers (recommended for HPC)
+## Optional: Pre-pull containers (recommended for HPC)
 
 To avoid repeated downloads and filesystem latency issues, you can pre-pull all containers:
 
-  bash scripts/pull_containers.sh
+  bash utils/pull_containers.sh
 
 Then point the pipeline to these local images usingsif_paths within your params file:
 
