@@ -7,7 +7,7 @@ gff_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/gff_truncated"
 protein_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/protein"
 cds_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/cds"
 chr_dict_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/chr_dict"
-fasta_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/fasta"
+fasta_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/assemblies_truncated"
 
 ext:
   gff: "gff3"
