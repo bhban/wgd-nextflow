@@ -173,8 +173,6 @@ workflow {
 
             annevo_fasta_out = ANNEVO_GFF_TO_FASTA(annevo_gff_out)
 
-            annevo_fasta_out = ANNEVO_GFF_TO_FASTA(annevo_gff_out)
-
             prep_input_ch = annevo_fasta_out.map { genome, source, ploidy, gff, pep, chr, cds ->
                 tuple(genome, source, ploidy, gff, pep, chr)
             }
