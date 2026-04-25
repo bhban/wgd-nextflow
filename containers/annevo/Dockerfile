@@ -17,7 +17,7 @@ WORKDIR /opt
 # clone repo
 RUN git clone https://github.com/xjtu-omics/ANNEVO.git \
     && cd ANNEVO \
-    && git checkout b07cb8e344e4c49165c8f818d9bf7708a495240b
+    && git checkout 2832e5f2526a7abcba978b62f70b46063e25ea9e
 
 WORKDIR /opt/ANNEVO
 
