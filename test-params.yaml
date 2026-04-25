@@ -7,18 +7,31 @@ gff_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/gff_truncated"
 protein_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/protein"
 cds_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/cds"
 chr_dict_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/chr_dict"
+fasta_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/fasta"
 
 ext:
   gff: "gff3"
   pep: "pep"
+  cds: "cds"
+  fasta: "fa"
+
+annotation:
+  run: true
+  tool: "annevo"
+
+annevo:
+  model_path: "/path/to/ANNEVO_model/ANNEVO_Magnoliopsida.pt"
+  batch_size: 8
+  extra_args: "--show_log"
+  cleanup_tmp: true
 
 orthofinder_bin: "orthofinder"
 macse_bin: "macse"
 iqtree_bin: "iqtree3"
 alerax_bin: "alerax"
 
-start_mode: "genespace"
-existing_genespace_wd: "/exports/eddie/scratch/s2428892/wgd-nextflow/workingDir_test"
+start_mode: "full"
+existing_genespace_wd: null
 existing_orthofinder_dir: null
 
 force_orthofinder: false
@@ -40,6 +53,8 @@ sif_paths:
   macse: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/macse_1.0.sif"
   iqtree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/iqtree_1.0.sif"
   alerax: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/alerax_1.0.sif"
+  annevo: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/annevo_1.0.sif"
+  gffutils: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/gffutils_1.0.sif"
 
 species_tree: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/species_tree.nwk"
 use_species_tree_for_orthofinder: true
