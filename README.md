@@ -27,6 +27,26 @@ This pipeline performs:
 
 ---
 
+Optional: Pre-pull containers (recommended for HPC)
+
+To avoid repeated downloads and filesystem latency issues, you can pre-pull all containers:
+
+  bash scripts/pull_containers.sh
+
+Then point the pipeline to these local images usingsif_paths within your params file:
+
+```
+  sif_paths:
+    genespace: "apptainer/genespace_1.1.sif"
+    macse: "apptainer/macse_1.0.sif"
+    iqtree: "apptainer/iqtree_1.0.sif"
+    alerax: "apptainer/alerax_1.0.sif"
+    annevo: "apptainer/annevo_1.0.sif"
+    gffutils: "apptainer/gffutils_1.0.sif"
+```
+
+---
+
 ## Input files
 
 ### 1. genomes.tsv
