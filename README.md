@@ -31,7 +31,9 @@ This pipeline performs:
 
 To avoid repeated downloads and filesystem latency issues, you can pre-pull all containers:
 
+```
   bash utils/pull_containers.sh
+```
 
 Then point the pipeline to these local images usingsif_paths within your params file:
 
