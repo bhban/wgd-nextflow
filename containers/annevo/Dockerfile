@@ -3,7 +3,7 @@ FROM continuumio/miniconda3:24.7.1-0
 LABEL software="ANNEVO" \
       software_version="2.2.3" \
       container_version="1.0" \
-      git_commit="b07cb8e344e4c49165c8f818d9bf7708a495240b" \
+      git_commit="2832e5f2526a7abcba978b62f70b46063e25ea9e" \
       org.opencontainers.image.source="https://github.com/bhban/wgd-nextflow"
       
 USER root
