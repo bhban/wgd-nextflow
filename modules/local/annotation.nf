@@ -7,7 +7,7 @@ process RUN_ANNEVO {
     output:
     tuple val(genome), val('annevo'), val(ploidy),
           path("${genome}.annevo.gff3"),
-          path(genome_fasta),
+          path("${genome}.annevo.input.fa"),
           path(chr)
 
     script:
@@ -15,8 +15,16 @@ process RUN_ANNEVO {
     def batch = params.annevo.batch_size ? "--batch_size ${params.annevo.batch_size}" : ""
 
     """
+    if [[ "${genome_fasta}" == *.gz ]]; then
+        gunzip -c "${genome_fasta}" > ${genome}.annevo.input.fa
+    else
+        cp "${genome_fasta}" ${genome}.annevo.input.fa
+    fi
+
+    test -s ${genome}.annevo.input.fa
+
     python annotation.py \\
-      --genome ${genome_fasta} \\
+      --genome ${genome}.annevo.input.fa \\
       --model_path ${params.annevo.model_path} \\
       --output ${genome}.annevo.gff3 \\
       --threads ${task.cpus} \\
@@ -24,6 +32,8 @@ process RUN_ANNEVO {
       ${extra}
 
     test -s ${genome}.annevo.gff3
+
+    rm -f ${genome}.annevo.input.fa
     """
 }
 
