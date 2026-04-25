@@ -16,9 +16,24 @@ def resolveChrDict(genome) {
 }
 
 def resolveGenomeFasta(genome) {
-    def fasta = file("${params.fasta_dir}/${genome}.${params.ext.fasta}")
-    if (fasta.exists()) return fasta
-    throw new IllegalArgumentException("No genome FASTA found for ${genome}: expected ${fasta}")
+    def exts = [
+        params.ext.fasta,
+        "${params.ext.fasta}.gz",
+        "fasta",
+        "fasta.gz",
+        "fna",
+        "fna.gz"
+    ]
+
+    for (ext in exts) {
+        def fasta = file("${params.fasta_dir}/${genome}.${ext}")
+        if (fasta.exists()) return fasta
+    }
+
+    throw new IllegalArgumentException(
+        "No genome FASTA found for ${genome}: expected one of " +
+        exts.collect { "${params.fasta_dir}/${genome}.${it}" }.join(", ")
+    )
 }
 
 def readGenomesTable(tsvPath) {
