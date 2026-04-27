@@ -7,6 +7,7 @@ include { PANGENES_PASS_FILTER; COLLAPSE_TANDEMS; WRITE_OG_FASTAS; MACSE_ALIGN_O
 include { WRITE_ALERAX_MAPPING; WRITE_ALERAX_FAMILIES; WRITE_ALERAX_MANIFEST; RUN_ALERAX; RUN_ALERAX_RANDOM; ALERAX_REPORT } from './modules/local/alerax'
 include { REDIPLOIDISATION } from './modules/local/rediploidisation'
 
+
 // Helper functions
 def resolveChrDict(genome) {
     def tsv = file("${params.chr_dict_dir}/${genome}.tsv")
@@ -119,6 +120,7 @@ def makeIqtreeChannelFromDir(treeDir) {
         }
 }
 
+
 // Workflow
 workflow {
     main:
@@ -176,6 +178,62 @@ workflow {
     alerax_models_ch = Channel.fromList(alerax_models)
     alerax_models_list_ch = Channel.value(alerax_models)
 
+    /*
+     * Standalone rediploidisation mode.
+     * Requires an external IQ-TREE directory and either a GENESPACE workingDir
+     * or positions_source = 'positions'.
+     */
+    if (params.start_mode == 'redip') {
+        if (!params.run_rediploidisation) {
+            error "--run_rediploidisation must be true when --start_mode redip"
+        }
+
+        if (!species_tree_path) {
+            error "--species_tree must be provided when --start_mode redip"
+        }
+
+        if (!params.rediploidisation?.gene_trees_dir?.toString()?.trim()) {
+            error "--rediploidisation.gene_trees_dir must be provided when --start_mode redip"
+        }
+
+        if (
+            params.rediploidisation?.positions_source != 'positions' &&
+            !params.rediploidisation?.genespace_wd?.toString()?.trim()
+        ) {
+            error "--rediploidisation.genespace_wd must be provided when --start_mode redip unless --rediploidisation.positions_source positions is used"
+        }
+
+        if (
+            params.rediploidisation?.positions_source == 'positions' &&
+            !params.rediploidisation?.positions?.toString()?.trim()
+        ) {
+            error "--rediploidisation.positions must be provided when --rediploidisation.positions_source positions is used"
+        }
+
+        def redip_genespace_wd_ch = params.rediploidisation?.genespace_wd?.toString()?.trim()
+            ? Channel.value(file(params.rediploidisation.genespace_wd))
+            : Channel.value(file('.'))
+
+        redip_out = REDIPLOIDISATION(
+            genomes_tsv_ch,
+            Channel.value(file(species_tree_path)),
+            makeIqtreeChannelFromDir(params.rediploidisation.gene_trees_dir),
+            redip_genespace_wd_ch
+        )
+
+        post_outputs_ch = post_outputs_ch.mix(redip_out.report)
+        post_outputs_ch = post_outputs_ch.mix(redip_out.classifications)
+        post_outputs_ch = post_outputs_ch.mix(redip_out.circos_links)
+        post_outputs_ch = post_outputs_ch.mix(redip_out.circos_plots)
+
+        publish:
+        genomeRepo = genome_repo_publish_ch
+        genespace_wd = genespace_publish_ch
+        post_genespace = post_outputs_ch
+
+        return
+    }
+
     def validated_out = null
     def genespace_ready_out
 
@@ -195,12 +253,10 @@ workflow {
 
             annevo_fasta_out = ANNEVO_GFF_TO_FASTA(annevo_gff_out)
 
-            annevo_fasta_out = ANNEVO_GFF_TO_FASTA(annevo_gff_out)
-
             prep_input_ch = annevo_fasta_out.map { genome, source, ploidy, gff, pep, chr, cds ->
                 tuple(genome, source, ploidy, gff, pep, chr)
             }
-            
+
             cds_files_ch = annevo_fasta_out
                 .map { genome, source, ploidy, gff, pep, chr, cds -> cds }
                 .collect()
@@ -269,7 +325,7 @@ workflow {
         genespace_ready_out = VALIDATE_GENESPACE_RESULTS(existing_wd_ch)
 
     } else {
-        error "Unsupported start_mode: ${params.start_mode}. Use 'full', 'parsed', or 'genespace'."
+        error "Unsupported start_mode: ${params.start_mode}. Use 'full', 'parsed', 'genespace', or 'redip'."
     }
 
     if (params.start_mode != 'genespace') {
@@ -430,33 +486,33 @@ workflow {
 
         post_outputs_ch = post_outputs_ch.mix(alerax_report_out)
     }
-    
+
     if (params.run_rediploidisation) {
         if (!species_tree_path) {
             error "--species_tree must be provided when --run_rediploidisation is true"
         }
-    
+
         def redip_gene_trees_dir = params.rediploidisation?.gene_trees_dir?.toString()?.trim()
-    
+
         def redip_iqtree_ch = redip_gene_trees_dir
             ? makeIqtreeChannelFromDir(redip_gene_trees_dir)
             : iqtree_out
-    
+
         def redip_genespace_wd_ch
-    
+
         if (params.rediploidisation?.genespace_wd?.toString()?.trim()) {
             redip_genespace_wd_ch = Channel.value(file(params.rediploidisation.genespace_wd))
         } else {
             redip_genespace_wd_ch = genespace_ready_out[0]
         }
-    
+
         redip_out = REDIPLOIDISATION(
             genomes_tsv_ch,
             Channel.value(file(species_tree_path)),
             redip_iqtree_ch,
             redip_genespace_wd_ch
         )
-    
+
         post_outputs_ch = post_outputs_ch.mix(redip_out.report)
         post_outputs_ch = post_outputs_ch.mix(redip_out.classifications)
         post_outputs_ch = post_outputs_ch.mix(redip_out.circos_links)
