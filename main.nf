@@ -429,6 +429,38 @@ workflow {
 
         post_outputs_ch = post_outputs_ch.mix(alerax_report_out)
     }
+    
+    if (params.run_rediploidisation) {
+        if (!species_tree_path) {
+            error "--species_tree must be provided when --run_rediploidisation is true"
+        }
+    
+        def redip_gene_trees_dir = params.rediploidisation?.gene_trees_dir?.toString()?.trim()
+    
+        def redip_iqtree_ch = redip_gene_trees_dir
+            ? makeIqtreeChannelFromDir(redip_gene_trees_dir)
+            : iqtree_out
+    
+        def redip_genespace_wd_ch
+    
+        if (params.rediploidisation?.genespace_wd?.toString()?.trim()) {
+            redip_genespace_wd_ch = Channel.value(file(params.rediploidisation.genespace_wd))
+        } else {
+            redip_genespace_wd_ch = genespace_ready_out[0]
+        }
+    
+        redip_out = REDIPLOIDISATION(
+            genomes_tsv_ch,
+            Channel.value(file(species_tree_path)),
+            redip_iqtree_ch,
+            redip_genespace_wd_ch
+        )
+    
+        post_outputs_ch = post_outputs_ch.mix(redip_out.report)
+        post_outputs_ch = post_outputs_ch.mix(redip_out.classifications)
+        post_outputs_ch = post_outputs_ch.mix(redip_out.circos_links)
+        post_outputs_ch = post_outputs_ch.mix(redip_out.circos_plots)
+    }
 
     publish:
     genomeRepo = genome_repo_publish_ch
