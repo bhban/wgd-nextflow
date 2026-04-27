@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
 
+'''
+Adapted from classify_redip_history_of_focal_lineage_2026_02_12.py (Written by Drew Larson)
+
+Find maximal clades in gene trees whose species are all drawn from a user-supplied
+allowed-species set, then report cases where the target species has the required
+copy pattern and list the species descending from the MRCA of those copies.
+'''
+
 from __future__ import annotations
 
 import argparse
