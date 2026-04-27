@@ -24,13 +24,14 @@ process RUN_ANNEVO {
     test -s "${genome}.annevo.input.fa"
 
     python /opt/ANNEVO/annotation.py \\
-      --genome "${genome}.annevo.input.fa" \\
-      --model_path "${params.annevo.model_path}" \\
-      --output "${genome}.annevo.gff3" \\
-      --threads ${task.cpus} \\
-      --tmp_path $PWD/annevo_tmp \\
-      ${batch} \\
-      ${extra}
+        --genome "${genome}.annevo.input.fa" \\
+        --model_path "${params.annevo.model_path}" \\
+        --output "${genome}.annevo.gff3" \\
+        --threads ${task.cpus} \\
+        --tmp_path $PWD/annevo_tmp \\
+        --num_classes 15 --boundary-aware --min_intron_length 20 \\
+        ${batch} \\
+        ${extra}
 
     test -s "${genome}.annevo.gff3"
     """
@@ -54,9 +55,9 @@ process ANNEVO_GFF_TO_FASTA {
     cp "${gff}" "${genome}.annevo.gff3"
 
     gffread "${genome}.annevo.gff3" \\
-      -g "${genome_fasta}" \\
-      -x "${genome}.annevo.cds" \\
-      -y "${genome}.annevo.pep"
+        -g "${genome_fasta}" \\
+        -x "${genome}.annevo.cds" \\
+        -y "${genome}.annevo.pep"
 
     test -s "${genome}.annevo.gff3"
     test -s "${genome}.annevo.pep"
