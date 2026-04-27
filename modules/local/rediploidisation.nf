@@ -117,8 +117,7 @@ process MAKE_REDIP_LINKS {
     input:
     tuple val(species), path(classification)
     path branch_definitions
-    path bed_dir
-    path pangenes_dir
+    path genespace_wd
 
     output:
     tuple val(species), path("${species}.circos_links.tsv")
@@ -128,7 +127,7 @@ process MAKE_REDIP_LINKS {
 
     def position_arg
     if (source == 'pangenes') {
-        position_arg = "--pangenes-dir ${pangenes_dir}"
+        position_arg = "--pangenes-dir ${genespace_wd}/pangenes"
     } else if (source == 'positions') {
         if (!params.rediploidisation.positions?.toString()?.trim()) {
             throw new IllegalArgumentException(
@@ -151,7 +150,7 @@ process MAKE_REDIP_LINKS {
             ${species_col_arg}
         """
     } else {
-        position_arg = "--bed-dir ${bed_dir}"
+        position_arg = "--bed-dir ${genespace_wd}/bed"
     }
 
     """
@@ -269,7 +268,7 @@ workflow REDIPLOIDISATION {
     genomes_tsv
     species_tree
     iqtree_results
-    positions
+    genespace_wd
 
     main:
     EXTRACT_REDIP_SPECIES(genomes_tsv)
@@ -302,7 +301,7 @@ workflow REDIPLOIDISATION {
     MAKE_REDIP_LINKS(
         CLASSIFY_REDIP_EVENTS.out,
         WRITE_BRANCH_DEFS.out,
-        positions
+        genespace_wd
     )
 
     PREP_REDIP_CIRCOS(MAKE_REDIP_LINKS.out)
