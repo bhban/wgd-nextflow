@@ -97,6 +97,27 @@ def resolveAleraxModels() {
     ])
 }
 
+def makeIqtreeChannelFromDir(treeDir) {
+    Channel
+        .fromPath("${treeDir}/og_*_iqtree.treefile", checkIfExists: true)
+        .map { treefile ->
+            def m = (treefile.baseName =~ /^og_(.+)_iqtree$/)
+            if (!m) {
+                throw new IllegalArgumentException("Could not parse OG from IQ-TREE filename: ${treefile}")
+            }
+
+            def og = m[0][1]
+
+            tuple(
+                og,
+                treefile,
+                file("${treeDir}/og_${og}_iqtree.ufboot"),
+                file("${treeDir}/og_${og}.iqtree.status"),
+                file("${treeDir}/og_${og}_NT.fasta")
+            )
+        }
+}
+
 // Workflow
 workflow {
     main:
