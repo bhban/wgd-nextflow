@@ -5,6 +5,7 @@ include { PRIMARY_TRANSCRIPT; FINALIZE_REPO_IDS } from './modules/local/prep'
 include { STAGE_GENOMEREPO; PARSE_ANNOTATIONS_BY_SOURCE; MAKE_PARSE_DONE; VALIDATE_PARSE_OUTPUTS; VALIDATE_GENESPACE_RESULTS; ORTHOFINDER_OR_SKIP; RUN_GENESPACE } from './modules/local/genespace'
 include { PANGENES_PASS_FILTER; COLLAPSE_TANDEMS; WRITE_OG_FASTAS; MACSE_ALIGN_OG; MACSE_REPORT; IQTREE_OG; IQTREE_REPORT } from './modules/local/post_genespace'
 include { WRITE_ALERAX_MAPPING; WRITE_ALERAX_FAMILIES; WRITE_ALERAX_MANIFEST; RUN_ALERAX; RUN_ALERAX_RANDOM; ALERAX_REPORT } from './modules/local/alerax'
+include { REDIPLOIDISATION } from './modules/local/rediploidisation'
 
 // Helper functions
 def resolveChrDict(genome) {
