@@ -157,34 +157,13 @@ workflow {
         }
 
     genomes_tsv_ch = Channel.value(file(params.genomes_tsv))
-    cds_files_ch   = Channel.fromPath("${params.cds_dir}/*.cds").collect()
-
-    def orthofinder_species_tree_arg = (
-        params.use_species_tree_for_orthofinder && species_tree_path
-    ) ? species_tree_path : ""
-
-    primary_transcript_script_ch     = Channel.value(file('scripts/primary_transcript.py'))
-    apply_chr_dict_script_ch         = Channel.value(file('scripts/apply_chr_dict_to_gff.py'))
-    finalize_repo_ids_script_ch      = Channel.value(file('scripts/finalize_repo_ids.py'))
-    parse_annotations_script_ch      = Channel.value(file('scripts/run_parse_annotations_by_source.R'))
-    validate_parse_outputs_script_ch = Channel.value(file('scripts/validate_parse_outputs.py'))
-    orthofinder_or_skip_script_ch    = Channel.value(file('scripts/orthofinder_or_skip.py'))
-    run_genespace_script_ch          = Channel.value(file('scripts/run_genespace.R'))
-    pangenes_pass_filter_script_ch   = Channel.value(file('scripts/pangenes_pass_filter.py'))
-    collapse_tandems_script_ch       = Channel.value(file('scripts/collapse_tandems.py'))
-    write_og_fastas_script_ch        = Channel.value(file('scripts/write_og_fastas.py'))
-
-    genome_ids_ch = Channel.value(genomes_rows.collect { it.genome })
-
-    def alerax_models = resolveAleraxModels()
-    alerax_models_ch = Channel.fromList(alerax_models)
-    alerax_models_list_ch = Channel.value(alerax_models)
 
     /*
-     * Standalone rediploidisation mode.
-     * Requires an external IQ-TREE directory and either a GENESPACE workingDir
-     * or positions_source = 'positions'.
+     * =========================
+     * REDIP-ONLY MODE
+     * =========================
      */
+
     if (params.start_mode == 'redip') {
         if (!params.run_rediploidisation) {
             error "--run_rediploidisation must be true when --start_mode redip"
@@ -202,296 +181,341 @@ workflow {
             params.rediploidisation?.positions_source != 'positions' &&
             !params.rediploidisation?.genespace_wd?.toString()?.trim()
         ) {
-            error "--rediploidisation.genespace_wd must be provided when --start_mode redip unless --rediploidisation.positions_source positions is used"
+            error "--rediploidisation.genespace_wd must be provided unless positions_source = positions"
         }
 
         if (
             params.rediploidisation?.positions_source == 'positions' &&
             !params.rediploidisation?.positions?.toString()?.trim()
         ) {
-            error "--rediploidisation.positions must be provided when --rediploidisation.positions_source positions is used"
+            error "--rediploidisation.positions must be provided when positions_source = positions"
         }
 
         def redip_genespace_wd_ch = params.rediploidisation?.genespace_wd?.toString()?.trim()
             ? Channel.value(file(params.rediploidisation.genespace_wd))
             : Channel.value(file('.'))
 
-        redip_out = REDIPLOIDISATION(
+        def redip_out = REDIPLOIDISATION(
             genomes_tsv_ch,
             Channel.value(file(species_tree_path)),
             makeIqtreeChannelFromDir(params.rediploidisation.gene_trees_dir),
             redip_genespace_wd_ch
         )
 
+        post_outputs_ch = post_outputs_ch.mix(
+            redip_out.rooted_trees.flatMap { og, tree, summary -> [tree, summary] }.collect()
+        )
+        post_outputs_ch = post_outputs_ch.mix(redip_out.branch_definitions)
+        post_outputs_ch = post_outputs_ch.mix(
+            redip_out.classifications.map { species, file -> file }.collect()
+        )
+        post_outputs_ch = post_outputs_ch.mix(
+            redip_out.circos_links.map { species, file -> file }.collect()
+        )
+        post_outputs_ch = post_outputs_ch.mix(
+            redip_out.circos_plots.map { species, dir -> dir }.collect()
+        )
         post_outputs_ch = post_outputs_ch.mix(redip_out.report)
-        post_outputs_ch = post_outputs_ch.mix(redip_out.classifications)
-        post_outputs_ch = post_outputs_ch.mix(redip_out.circos_links)
-        post_outputs_ch = post_outputs_ch.mix(redip_out.circos_plots)
-    }
-
-    def validated_out = null
-    def genespace_ready_out
-
-    if (params.start_mode == 'full') {
-        def prep_input_ch
-
-        if (params.annotation?.run) {
-            if (params.annotation.tool != 'annevo') {
-                error "Unsupported annotation tool: ${params.annotation.tool}. Currently supported: annevo"
-            }
-
-            annevo_input_ch = genomes_ch.map { genome, source, ploidy, gff, pep, chr, fasta ->
-                tuple(genome, source, ploidy, fasta, chr)
-            }
-
-            annevo_gff_out = RUN_ANNEVO(annevo_input_ch)
-
-            annevo_fasta_out = ANNEVO_GFF_TO_FASTA(annevo_gff_out)
-
-            prep_input_ch = annevo_fasta_out.map { genome, source, ploidy, gff, pep, chr, cds ->
-                tuple(genome, source, ploidy, gff, pep, chr)
-            }
-
-            cds_files_ch = annevo_fasta_out
-                .map { genome, source, ploidy, gff, pep, chr, cds -> cds }
-                .collect()
-
-        } else {
-            prep_input_ch = genomes_ch.map { genome, source, ploidy, gff, pep, chr, fasta ->
-                tuple(genome, source, ploidy, gff, pep, chr)
-            }
-        }
-
-        primary_out = PRIMARY_TRANSCRIPT(
-            prep_input_ch,
-            primary_transcript_script_ch
-        )
-
-        finalized_out = FINALIZE_REPO_IDS(
-            primary_out,
-            apply_chr_dict_script_ch,
-            finalize_repo_ids_script_ch
-        )
-
-        staged_repo_out = STAGE_GENOMEREPO(
-            finalized_out
-                .flatMap { genome, source, ploidy, gff, pep, chr ->
-                    [gff, pep, chr]
-                }
-                .collect()
-        )
-
-        genome_repo_publish_ch = staged_repo_out
-
-        parsed_out = PARSE_ANNOTATIONS_BY_SOURCE(
-            staged_repo_out,
-            genomes_tsv_ch,
-            parse_annotations_script_ch
-        )
-
-        validated_out = VALIDATE_PARSE_OUTPUTS(
-            parsed_out[0],
-            parsed_out[1],
-            validate_parse_outputs_script_ch,
-            genome_ids_ch
-        )
-
-    } else if (params.start_mode == 'parsed') {
-        if (!params.existing_genespace_wd) {
-            error "When --start_mode parsed is used, --existing_genespace_wd must be provided"
-        }
-
-        existing_wd_ch = Channel.value(file(params.existing_genespace_wd))
-        parse_done_ch  = MAKE_PARSE_DONE()
-
-        validated_out = VALIDATE_PARSE_OUTPUTS(
-            existing_wd_ch,
-            parse_done_ch,
-            validate_parse_outputs_script_ch,
-            genome_ids_ch
-        )
-
-    } else if (params.start_mode == 'genespace') {
-        if (!params.existing_genespace_wd) {
-            error "When --start_mode genespace is used, --existing_genespace_wd must be provided"
-        }
-
-        existing_wd_ch = Channel.value(file(params.existing_genespace_wd))
-        genespace_ready_out = VALIDATE_GENESPACE_RESULTS(existing_wd_ch)
 
     } else {
-        error "Unsupported start_mode: ${params.start_mode}. Use 'full', 'parsed', 'genespace', or 'redip'."
-    }
 
-    if (params.start_mode != 'genespace') {
-        def orthofinder_dir_arg
-        def orthofinder_out = null
+        /*
+         * =========================
+         * FULL / PARSED / GENESPACE PIPELINE
+         * =========================
+         */
 
-        def use_external_orthofinder = (
-            params.run_external_orthofinder ||
-            params.use_species_tree_for_orthofinder
-        )
+        cds_files_ch = Channel.fromPath("${params.cds_dir}/*.cds").collect()
 
-        if (params.existing_orthofinder_dir) {
-            orthofinder_dir_arg = params.existing_orthofinder_dir
+        def orthofinder_species_tree_arg = (
+            params.use_species_tree_for_orthofinder && species_tree_path
+        ) ? species_tree_path : ""
 
-        } else if (use_external_orthofinder) {
-            orthofinder_out = ORTHOFINDER_OR_SKIP(
-                validated_out,
-                genome_ids_ch,
-                orthofinder_or_skip_script_ch,
-                orthofinder_species_tree_arg
-            )
-            orthofinder_dir_arg = orthofinder_out[0]
+        primary_transcript_script_ch     = Channel.value(file('scripts/primary_transcript.py'))
+        apply_chr_dict_script_ch         = Channel.value(file('scripts/apply_chr_dict_to_gff.py'))
+        finalize_repo_ids_script_ch      = Channel.value(file('scripts/finalize_repo_ids.py'))
+        parse_annotations_script_ch      = Channel.value(file('scripts/run_parse_annotations_by_source.R'))
+        validate_parse_outputs_script_ch = Channel.value(file('scripts/validate_parse_outputs.py'))
+        orthofinder_or_skip_script_ch    = Channel.value(file('scripts/orthofinder_or_skip.py'))
+        run_genespace_script_ch          = Channel.value(file('scripts/run_genespace.R'))
+        pangenes_pass_filter_script_ch   = Channel.value(file('scripts/pangenes_pass_filter.py'))
+        collapse_tandems_script_ch       = Channel.value(file('scripts/collapse_tandems.py'))
+        write_og_fastas_script_ch        = Channel.value(file('scripts/write_og_fastas.py'))
 
-        } else {
-            orthofinder_dir_arg = ''
-        }
+        genome_ids_ch = Channel.value(genomes_rows.collect { it.genome })
 
-        genespace_ready_out = RUN_GENESPACE(
-            validated_out,
-            orthofinder_dir_arg,
-            genomes_tsv_ch,
-            run_genespace_script_ch
-        )
-    }
+        def alerax_models = resolveAleraxModels()
+        def alerax_models_ch = Channel.fromList(alerax_models)
 
-    genespace_publish_ch = genespace_ready_out[0]
+        def validated_out = null
+        def genespace_ready_out
 
-    pass_out = PANGENES_PASS_FILTER(
-        genespace_ready_out,
-        genomes_tsv_ch,
-        pangenes_pass_filter_script_ch
-    )
+        if (params.start_mode == 'full') {
+            def prep_input_ch
 
-    post_outputs_ch = post_outputs_ch.mix(pass_out)
-
-    pass_tsv_for_og = pass_out[0]
-    og_list_for_og  = pass_out[1]
-
-    if (params.collapse_tandems) {
-        tandem_out = COLLAPSE_TANDEMS(
-            pass_tsv_for_og,
-            genespace_ready_out[0],
-            genespace_ready_out[1],
-            genomes_tsv_ch,
-            collapse_tandems_script_ch
-        )
-
-        post_outputs_ch = post_outputs_ch.mix(tandem_out)
-
-        pass_tsv_for_og = tandem_out[0]
-        og_list_for_og  = tandem_out[2]
-    }
-
-    og_fastas_out = WRITE_OG_FASTAS(
-        pass_tsv_for_og,
-        og_list_for_og,
-        genomes_tsv_ch,
-        cds_files_ch,
-        write_og_fastas_script_ch
-    )
-
-    post_outputs_ch = post_outputs_ch.mix(og_fastas_out)
-
-    og_fasta_ch = og_fastas_out[0]
-        .flatMap { og_dir ->
-            og_dir.listFiles()
-                .findAll { it.name ==~ /og_.+\.fasta/ }
-                .sort { a, b -> a.name <=> b.name }
-                .collect { fasta ->
-                    def m = (fasta.baseName =~ /^og_(.+)$/)
-                    if (!m) {
-                        throw new IllegalArgumentException("Could not parse OG from filename: ${fasta}")
-                    }
-                    tuple(m[0][1], fasta)
+            if (params.annotation?.run) {
+                if (params.annotation.tool != 'annevo') {
+                    error "Unsupported annotation tool: ${params.annotation.tool}. Currently supported: annevo"
                 }
-        }
 
-    macse_out = MACSE_ALIGN_OG(og_fasta_ch)
+                annevo_input_ch = genomes_ch.map { genome, source, ploidy, gff, pep, chr, fasta ->
+                    tuple(genome, source, ploidy, fasta, chr)
+                }
 
-    macse_report_out = MACSE_REPORT(
-        macse_out
-            .flatMap { og, aa, nt, status, log -> [aa, nt, status, log] }
-            .collect()
-    )
-    
-    post_outputs_ch = post_outputs_ch.mix(
-        macse_out
-            .flatMap { og, aa, nt, status, log -> [aa, nt, status, log] }
-            .collect()
-    )
+                annevo_gff_out = RUN_ANNEVO(annevo_input_ch)
+                annevo_fasta_out = ANNEVO_GFF_TO_FASTA(annevo_gff_out)
 
-    post_outputs_ch = post_outputs_ch.mix(macse_report_out)
+                prep_input_ch = annevo_fasta_out.map { genome, source, ploidy, gff, pep, chr, cds ->
+                    tuple(genome, source, ploidy, gff, pep, chr)
+                }
 
-    iqtree_in = macse_out.filter { og, aa, nt, status, log ->
-        status.text.trim() == 'OK'
-    }
+                cds_files_ch = annevo_fasta_out
+                    .map { genome, source, ploidy, gff, pep, chr, cds -> cds }
+                    .collect()
 
-    iqtree_out = IQTREE_OG(iqtree_in)
+            } else {
+                prep_input_ch = genomes_ch.map { genome, source, ploidy, gff, pep, chr, fasta ->
+                    tuple(genome, source, ploidy, gff, pep, chr)
+                }
+            }
 
-    iqtree_report_out = IQTREE_REPORT(
-        iqtree_out
-            .flatMap { og, treefile, ufboot, status, nt, log, all_iqtree -> [treefile, ufboot, status, nt, log, all_iqtree] }
-            .collect()
-    )
-    
-    post_outputs_ch = post_outputs_ch.mix(
-        iqtree_out
-            .flatMap { og, treefile, ufboot, status, nt, log, all_iqtree -> [treefile, ufboot, status, nt, log, all_iqtree] }
-            .collect()
-    )   
+            primary_out = PRIMARY_TRANSCRIPT(
+                prep_input_ch,
+                primary_transcript_script_ch
+            )
 
-    post_outputs_ch = post_outputs_ch.mix(iqtree_report_out)
+            finalized_out = FINALIZE_REPO_IDS(
+                primary_out,
+                apply_chr_dict_script_ch,
+                finalize_repo_ids_script_ch
+            )
 
-    if (params.run_alerax) {
-        def species_tree_ch = params.use_species_tree_for_alerax
-            ? Channel.value(file(species_tree_path))
-            : null
-    
-        def alerax_out = ALERAX_WORKFLOW(
-            iqtree_out,
-            species_tree_ch,
-            alerax_models_ch
-        )
-    
-        post_outputs_ch = post_outputs_ch.mix(alerax_out.families)
-        post_outputs_ch = post_outputs_ch.mix(alerax_out.manifest)
-        post_outputs_ch = post_outputs_ch.mix(alerax_out.results.map { model_id, dir -> dir }.collect())
-        post_outputs_ch = post_outputs_ch.mix(alerax_out.report)
-    }
+            staged_repo_out = STAGE_GENOMEREPO(
+                finalized_out
+                    .flatMap { genome, source, ploidy, gff, pep, chr ->
+                        [gff, pep, chr]
+                    }
+                    .collect()
+            )
 
-    if (params.run_rediploidisation) {
-        if (!species_tree_path) {
-            error "--species_tree must be provided when --run_rediploidisation is true"
-        }
+            genome_repo_publish_ch = staged_repo_out
 
-        def redip_gene_trees_dir = params.rediploidisation?.gene_trees_dir?.toString()?.trim()
+            parsed_out = PARSE_ANNOTATIONS_BY_SOURCE(
+                staged_repo_out,
+                genomes_tsv_ch,
+                parse_annotations_script_ch
+            )
 
-        def redip_iqtree_ch = redip_gene_trees_dir
-            ? makeIqtreeChannelFromDir(redip_gene_trees_dir)
-            : iqtree_out
+            validated_out = VALIDATE_PARSE_OUTPUTS(
+                parsed_out[0],
+                parsed_out[1],
+                validate_parse_outputs_script_ch,
+                genome_ids_ch
+            )
 
-        def redip_genespace_wd_ch
+        } else if (params.start_mode == 'parsed') {
+            if (!params.existing_genespace_wd) {
+                error "When --start_mode parsed is used, --existing_genespace_wd must be provided"
+            }
 
-        if (params.rediploidisation?.genespace_wd?.toString()?.trim()) {
-            redip_genespace_wd_ch = Channel.value(file(params.rediploidisation.genespace_wd))
+            existing_wd_ch = Channel.value(file(params.existing_genespace_wd))
+            parse_done_ch  = MAKE_PARSE_DONE()
+
+            validated_out = VALIDATE_PARSE_OUTPUTS(
+                existing_wd_ch,
+                parse_done_ch,
+                validate_parse_outputs_script_ch,
+                genome_ids_ch
+            )
+
+        } else if (params.start_mode == 'genespace') {
+            if (!params.existing_genespace_wd) {
+                error "When --start_mode genespace is used, --existing_genespace_wd must be provided"
+            }
+
+            existing_wd_ch = Channel.value(file(params.existing_genespace_wd))
+            genespace_ready_out = VALIDATE_GENESPACE_RESULTS(existing_wd_ch)
+
         } else {
-            redip_genespace_wd_ch = genespace_ready_out[0]
+            error "Unsupported start_mode: ${params.start_mode}. Use 'full', 'parsed', 'genespace', or 'redip'."
         }
 
-        redip_out = REDIPLOIDISATION(
+        if (params.start_mode != 'genespace') {
+            def orthofinder_dir_arg
+            def orthofinder_out = null
+
+            def use_external_orthofinder = (
+                params.run_external_orthofinder ||
+                params.use_species_tree_for_orthofinder
+            )
+
+            if (params.existing_orthofinder_dir) {
+                orthofinder_dir_arg = params.existing_orthofinder_dir
+
+            } else if (use_external_orthofinder) {
+                orthofinder_out = ORTHOFINDER_OR_SKIP(
+                    validated_out,
+                    genome_ids_ch,
+                    orthofinder_or_skip_script_ch,
+                    orthofinder_species_tree_arg
+                )
+                orthofinder_dir_arg = orthofinder_out[0]
+
+            } else {
+                orthofinder_dir_arg = ''
+            }
+
+            genespace_ready_out = RUN_GENESPACE(
+                validated_out,
+                orthofinder_dir_arg,
+                genomes_tsv_ch,
+                run_genespace_script_ch
+            )
+        }
+
+        genespace_publish_ch = genespace_ready_out[0]
+
+        pass_out = PANGENES_PASS_FILTER(
+            genespace_ready_out,
             genomes_tsv_ch,
-            Channel.value(file(species_tree_path)),
-            redip_iqtree_ch,
-            redip_genespace_wd_ch
+            pangenes_pass_filter_script_ch
         )
 
-        post_outputs_ch = post_outputs_ch.mix(redip_out.report)
-        post_outputs_ch = post_outputs_ch.mix(redip_out.classifications)
-        post_outputs_ch = post_outputs_ch.mix(redip_out.circos_links)
-        post_outputs_ch = post_outputs_ch.mix(redip_out.circos_plots)
+        post_outputs_ch = post_outputs_ch.mix(pass_out)
+
+        pass_tsv_for_og = pass_out[0]
+        og_list_for_og  = pass_out[1]
+
+        if (params.collapse_tandems) {
+            tandem_out = COLLAPSE_TANDEMS(
+                pass_tsv_for_og,
+                genespace_ready_out[0],
+                genespace_ready_out[1],
+                genomes_tsv_ch,
+                collapse_tandems_script_ch
+            )
+
+            post_outputs_ch = post_outputs_ch.mix(tandem_out)
+
+            pass_tsv_for_og = tandem_out[0]
+            og_list_for_og  = tandem_out[1]
+        }
+
+        og_fastas_out = WRITE_OG_FASTAS(
+            pass_tsv_for_og,
+            og_list_for_og,
+            genomes_tsv_ch,
+            cds_files_ch,
+            write_og_fastas_script_ch
+        )
+
+        post_outputs_ch = post_outputs_ch.mix(og_fastas_out)
+
+        og_fasta_ch = og_fastas_out[0]
+            .flatMap { og_dir ->
+                og_dir.listFiles()
+                    .findAll { it.name ==~ /og_.+\.fasta/ }
+                    .sort { a, b -> a.name <=> b.name }
+                    .collect { fasta ->
+                        def m = (fasta.baseName =~ /^og_(.+)$/)
+                        if (!m) {
+                            throw new IllegalArgumentException("Could not parse OG from filename: ${fasta}")
+                        }
+                        tuple(m[0][1], fasta)
+                    }
+            }
+
+        macse_out = MACSE_ALIGN_OG(og_fasta_ch)
+
+        macse_all_outputs_ch = macse_out
+            .flatMap { og, aa, nt, status, log -> [aa, nt, status, log] }
+            .collect()
+
+        macse_report_out = MACSE_REPORT(macse_all_outputs_ch)
+
+        post_outputs_ch = post_outputs_ch.mix(macse_all_outputs_ch)
+        post_outputs_ch = post_outputs_ch.mix(macse_report_out)
+
+        iqtree_in = macse_out.filter { og, aa, nt, status, log ->
+            status.text.trim() == 'OK'
+        }
+
+        iqtree_out = IQTREE_OG(iqtree_in)
+
+        iqtree_all_outputs_ch = iqtree_out
+            .flatMap { og, treefile, ufboot, status, nt, log, all_iqtree ->
+                [treefile, ufboot, status, nt, log, all_iqtree]
+            }
+            .collect()
+
+        iqtree_report_out = IQTREE_REPORT(iqtree_all_outputs_ch)
+
+        post_outputs_ch = post_outputs_ch.mix(iqtree_all_outputs_ch)
+        post_outputs_ch = post_outputs_ch.mix(iqtree_report_out)
+
+        if (params.run_alerax) {
+            def species_tree_ch = params.use_species_tree_for_alerax
+                ? Channel.value(file(species_tree_path))
+                : Channel.empty()
+
+            def alerax_out = ALERAX_WORKFLOW(
+                iqtree_out,
+                species_tree_ch,
+                alerax_models_ch
+            )
+
+            post_outputs_ch = post_outputs_ch.mix(alerax_out.families)
+            post_outputs_ch = post_outputs_ch.mix(alerax_out.manifest)
+            post_outputs_ch = post_outputs_ch.mix(
+                alerax_out.results.map { model_id, dir -> dir }.collect()
+            )
+            post_outputs_ch = post_outputs_ch.mix(alerax_out.report)
+        }
+
+        if (params.run_rediploidisation) {
+            if (!species_tree_path) {
+                error "--species_tree must be provided when --run_rediploidisation is true"
+            }
+
+            def redip_gene_trees_dir = params.rediploidisation?.gene_trees_dir?.toString()?.trim()
+
+            def redip_iqtree_ch = redip_gene_trees_dir
+                ? makeIqtreeChannelFromDir(redip_gene_trees_dir)
+                : iqtree_out
+
+            def redip_genespace_wd_ch = params.rediploidisation?.genespace_wd?.toString()?.trim()
+                ? Channel.value(file(params.rediploidisation.genespace_wd))
+                : genespace_ready_out[0]
+
+            def redip_out = REDIPLOIDISATION(
+                genomes_tsv_ch,
+                Channel.value(file(species_tree_path)),
+                redip_iqtree_ch,
+                redip_genespace_wd_ch
+            )
+
+            post_outputs_ch = post_outputs_ch.mix(
+                redip_out.rooted_trees.flatMap { og, tree, summary -> [tree, summary] }.collect()
+            )
+            post_outputs_ch = post_outputs_ch.mix(redip_out.branch_definitions)
+            post_outputs_ch = post_outputs_ch.mix(
+                redip_out.classifications.map { species, file -> file }.collect()
+            )
+            post_outputs_ch = post_outputs_ch.mix(
+                redip_out.circos_links.map { species, file -> file }.collect()
+            )
+            post_outputs_ch = post_outputs_ch.mix(
+                redip_out.circos_plots.map { species, dir -> dir }.collect()
+            )
+            post_outputs_ch = post_outputs_ch.mix(redip_out.report)
+        }
     }
+
+    /*
+     * =========================
+     * SINGLE PUBLISH BLOCK
+     * =========================
+     */
 
     publish:
     genomeRepo = genome_repo_publish_ch
