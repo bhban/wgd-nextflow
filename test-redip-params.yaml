@@ -9,15 +9,46 @@ sif_paths:
 
 genomes_tsv: "/exports/eddie/scratch/s2428892/redip-test/testdata/genomes.tsv"
 species_tree: "/exports/eddie/scratch/s2428892/redip-test/testdata/species_tree.nwk"
-chr_dict_dir: "/exports/eddie/scratch/s2428892/redip-test/testdata/chr_dict"
 
-start_mode: "redip"
+start_mode: "full"
 run_rediploidisation: true
 
-rediploidisation:
-  gene_trees_dir: "/exports/eddie/scratch/s2428892/redip-test/recovered_iqtree"
-  genespace_wd: "/exports/eddie/scratch/s2428892/redip-test/workingDir_test"
 
+working_dir: "workingDir_test"
+postdir: "post_genespace_test"
+
+gff_dir: "/exports/eddie/scratch/s2428892/redip-test/testdata/gff_truncated"
+protein_dir: "/exports/eddie/scratch/s2428892/redip-test/testdata/protein"
+cds_dir: "/exports/eddie/scratch/s2428892/redip-test/testdata/cds"
+chr_dict_dir: "/exports/eddie/scratch/s2428892/redip-test/testdata/chr_dict"
+
+ext:
+  gff: "gff3"
+  pep: "pep"
+  cds: "cds"
+
+annotation:
+  run: false
+
+existing_genespace_wd: null
+existing_orthofinder_dir: null
+
+force_orthofinder: false
+run_external_orthofinder: true
+orthofinder_analysis_threads: 2
+use_species_tree_for_orthofinder: true
+
+genespace:
+  rawOrthofinderDir: ""
+  blkSize: 5
+  orthofinder_in_blk: true
+
+require_outgroup_og: true
+collapse_tandems: true
+
+rediploidisation:
+  gene_trees_dir: ""
+  genespace_wd: ""
   positions_source: "bed"
 
   species_tree_format: 1
@@ -31,5 +62,4 @@ rediploidisation:
   min_tips: 1
 
   position_key_type: "gene"
-
   cleanup_tmp: true
