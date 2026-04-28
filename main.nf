@@ -438,53 +438,17 @@ workflow {
     post_outputs_ch = post_outputs_ch.mix(iqtree_report_out)
 
     if (params.run_alerax) {
-        alerax_map_out = WRITE_ALERAX_MAPPING(iqtree_out)
-
-        families_out = WRITE_ALERAX_FAMILIES(
-            alerax_map_out
-                .flatMap { og, mapping, ufboot -> [mapping, ufboot] }
-                .collect()
+        def species_tree_ch = params.use_species_tree_for_alerax
+            ? Channel.value(file(species_tree_path))
+            : null
+    
+        def alerax_out = ALERAX_WORKFLOW(
+            iqtree_out,
+            species_tree_ch,
+            alerax_models_ch
         )
-
-        post_outputs_ch = post_outputs_ch.mix(families_out)
-
-        manifest_out = WRITE_ALERAX_MANIFEST(alerax_models_list_ch)
-
-        post_outputs_ch = post_outputs_ch.mix(manifest_out)
-
-        if (params.use_species_tree_for_alerax) {
-            species_tree_ch = Channel.value(file(species_tree_path))
-
-            alerax_in = alerax_models_ch
-                .combine(families_out)
-                .combine(species_tree_ch)
-                .map { model, fam, tree ->
-                    tuple(fam, tree, model)
-                }
-
-            alerax_results_out = RUN_ALERAX(alerax_in)
-        } else {
-            alerax_in = alerax_models_ch
-                .combine(families_out)
-                .map { model, fam ->
-                    tuple(fam, model)
-                }
-
-            alerax_results_out = RUN_ALERAX_RANDOM(alerax_in)
-        }
-
-        post_outputs_ch = post_outputs_ch.mix(alerax_results_out)
-
-        alerax_report_inputs = alerax_results_out
-            .map { model_id, model_dir -> model_dir }
-            .collect()
-
-        alerax_report_out = ALERAX_REPORT(
-            alerax_report_inputs,
-            manifest_out
-        )
-
-        post_outputs_ch = post_outputs_ch.mix(alerax_report_out)
+    
+        post_outputs_ch = post_outputs_ch.mix(alerax_out.report)
     }
 
     if (params.run_rediploidisation) {
