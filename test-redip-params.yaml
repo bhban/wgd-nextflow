@@ -1,0 +1,25 @@
+genomes_tsv: "/exports/eddie/scratch/s2428892/redip-test/testdata/genomes.tsv"
+species_tree: "/exports/eddie/scratch/s2428892/redip-test/testdata/species_tree.nwk"
+
+start_mode: "redip"
+run_rediploidisation: true
+
+rediploidisation:
+  gene_trees_dir: "/exports/eddie/scratch/s2428892/redip-test/recovered_iqtree"
+  genespace_wd: "/exports/eddie/scratch/s2428892/redip-test/workingDir_test"
+
+  positions_source: "bed"
+
+  species_tree_format: 1
+  gene_tree_format: 1
+
+  tip_separator: "|"
+  label_format: "species_chr_gene"
+
+  copy_mode: "target_exactly_n"
+  required_copies: 2
+  min_tips: 1
+
+  position_key_type: "gene"
+
+  cleanup_tmp: true
