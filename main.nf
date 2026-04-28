@@ -227,13 +227,6 @@ workflow {
         post_outputs_ch = post_outputs_ch.mix(redip_out.classifications)
         post_outputs_ch = post_outputs_ch.mix(redip_out.circos_links)
         post_outputs_ch = post_outputs_ch.mix(redip_out.circos_plots)
-
-        publish:
-        genomeRepo = genome_repo_publish_ch
-        genespace_wd = genespace_publish_ch
-        post_genespace = post_outputs_ch
-
-        return
     }
 
     def validated_out = null
@@ -462,6 +455,9 @@ workflow {
             alerax_models_ch
         )
     
+        post_outputs_ch = post_outputs_ch.mix(alerax_out.families)
+        post_outputs_ch = post_outputs_ch.mix(alerax_out.manifest)
+        post_outputs_ch = post_outputs_ch.mix(alerax_out.results.map { model_id, dir -> dir }.collect())
         post_outputs_ch = post_outputs_ch.mix(alerax_out.report)
     }
 
