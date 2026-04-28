@@ -5,6 +5,7 @@ process EXTRACT_REDIP_SPECIES {
 
     input:
     path genomes_tsv
+    path redip_utils
 
     output:
     path "redip_species.txt"
@@ -12,10 +13,11 @@ process EXTRACT_REDIP_SPECIES {
     script:
     """
     python - <<'PY'
-from pathlib import Path
 import sys
+from pathlib import Path
 
-sys.path.insert(0, "${projectDir}/scripts/rediploidisation")
+sys.path.insert(0, str(Path("${redip_utils}").parent))
+
 from redip_utils import read_redip_species_from_genomes_tsv
 
 species = read_redip_species_from_genomes_tsv("${genomes_tsv}")
@@ -35,6 +37,8 @@ process ROOT_GENE_TREE {
     input:
     tuple val(og), path(treefile)
     path genomes_tsv
+    path root_script
+    path redip_utils
 
     output:
     tuple val(og),
@@ -43,7 +47,7 @@ process ROOT_GENE_TREE {
 
     script:
     """
-    python ${projectDir}/scripts/rediploidisation/root_gene_tree.py \\
+    python ${root_script} \\
         --tree ${treefile} \\
         --genomes-tsv ${genomes_tsv} \\
         --output-tree og_${og}.rooted.treefile \\
@@ -60,6 +64,8 @@ process WRITE_BRANCH_DEFS {
     input:
     path species_tree
     path genomes_tsv
+    path branch_script
+    path redip_utils
 
     output:
     path "branch_definitions"
@@ -68,7 +74,7 @@ process WRITE_BRANCH_DEFS {
     """
     mkdir -p branch_definitions
 
-    python ${projectDir}/scripts/rediploidisation/write_branch_defs.py \\
+    python ${branch_script} \\
         --tree ${species_tree} \\
         --genomes-tsv ${genomes_tsv} \\
         --output-dir branch_definitions \\
@@ -83,6 +89,8 @@ process CLASSIFY_REDIP_EVENTS {
     input:
     tuple val(species), path(rooted_trees)
     path genomes_tsv
+    path classify_script
+    path redip_utils
 
     output:
     tuple val(species), path("${species}.redip_classification.tsv")
@@ -98,7 +106,7 @@ process CLASSIFY_REDIP_EVENTS {
         echo >> ${species}.rooted_gene_trees.nwk
     done
 
-    python ${projectDir}/scripts/rediploidisation/classify.py \\
+    python ${classify_script} \\
         --target-species ${species} \\
         --treefile ${species}.rooted_gene_trees.nwk \\
         --genomes-tsv ${genomes_tsv} \\
@@ -119,6 +127,8 @@ process MAKE_REDIP_LINKS {
     tuple val(species), path(classification)
     path branch_definitions
     path genespace_wd
+    path links_script
+    path redip_utils
 
     output:
     tuple val(species), path("${species}.circos_links.tsv")
@@ -155,7 +165,7 @@ process MAKE_REDIP_LINKS {
     }
 
     """
-    python ${projectDir}/scripts/rediploidisation/make_links.py \\
+    python ${links_script} \\
         --species ${species} \\
         --classification-tsv ${classification} \\
         ${position_arg} \\
@@ -177,13 +187,15 @@ process PREP_REDIP_CIRCOS {
 
     input:
     tuple val(species), path(circos_links)
+    path prep_script
+    path redip_utils
 
     output:
     tuple val(species), path("${species}")
 
     script:
     """
-    python ${projectDir}/scripts/rediploidisation/prep_circos.py \\
+    python ${prep_script} \\
         --species ${species} \\
         --circos-links ${circos_links} \\
         --chr-bed ${params.chr_dict_dir}/${species}_chr_lengths.bed \\
@@ -272,7 +284,14 @@ workflow REDIPLOIDISATION {
     genespace_wd
 
     main:
-    EXTRACT_REDIP_SPECIES(genomes_tsv)
+    redip_utils_ch = Channel.value(file('scripts/rediploidisation/redip_utils.py'))
+    root_script_ch = Channel.value(file('scripts/rediploidisation/root_gene_tree.py'))
+    branch_script_ch = Channel.value(file('scripts/rediploidisation/write_branch_defs.py'))
+    classify_script_ch = Channel.value(file('scripts/rediploidisation/classify.py'))
+    links_script_ch = Channel.value(file('scripts/rediploidisation/make_links.py'))
+    prep_script_ch = Channel.value(file('scripts/rediploidisation/prep_circos.py'))
+
+    EXTRACT_REDIP_SPECIES(genomes_tsv, redip_utils_ch)
 
     redip_species_ch = EXTRACT_REDIP_SPECIES.out
         .splitText()
@@ -283,7 +302,12 @@ workflow REDIPLOIDISATION {
         tuple(og, treefile)
     }
 
-    ROOT_GENE_TREE(iqtree_tree_ch, genomes_tsv)
+    ROOT_GENE_TREE(
+        iqtree_tree_ch,
+        genomes_tsv,
+        root_script_ch,
+        redip_utils_ch
+    )
 
     rooted_trees_ch = ROOT_GENE_TREE.out
         .map { og, rooted_tree, summary -> rooted_tree }
@@ -293,19 +317,35 @@ workflow REDIPLOIDISATION {
         .map { og, rooted_tree, summary -> summary }
         .collect()
 
-    WRITE_BRANCH_DEFS(species_tree, genomes_tsv)
+    WRITE_BRANCH_DEFS(
+        species_tree,
+        genomes_tsv,
+        branch_script_ch,
+        redip_utils_ch
+    )
 
     classify_input_ch = redip_species_ch.combine(rooted_trees_ch)
 
-    CLASSIFY_REDIP_EVENTS(classify_input_ch, genomes_tsv)
+    CLASSIFY_REDIP_EVENTS(
+        classify_input_ch,
+        genomes_tsv,
+        classify_script_ch,
+        redip_utils_ch
+    )
 
     MAKE_REDIP_LINKS(
         CLASSIFY_REDIP_EVENTS.out,
         WRITE_BRANCH_DEFS.out,
-        genespace_wd
+        genespace_wd,
+        links_script_ch,
+        redip_utils_ch
     )
 
-    PREP_REDIP_CIRCOS(MAKE_REDIP_LINKS.out)
+    PREP_REDIP_CIRCOS(
+        MAKE_REDIP_LINKS.out,
+        prep_script_ch,
+        redip_utils_ch
+    )
 
     PLOT_REDIP_CIRCOS(PREP_REDIP_CIRCOS.out)
 
