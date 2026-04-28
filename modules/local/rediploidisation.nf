@@ -30,6 +30,7 @@ PY
 
 process ROOT_GENE_TREE {
     tag { "og_${og}" }
+    array (params.array_size as int)
 
     input:
     tuple val(og), path(treefile)
