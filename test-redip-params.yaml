@@ -9,6 +9,7 @@ sif_paths:
 
 genomes_tsv: "/exports/eddie/scratch/s2428892/redip-test/testdata/genomes.tsv"
 species_tree: "/exports/eddie/scratch/s2428892/redip-test/testdata/species_tree.nwk"
+chr_dict_dir: "/exports/eddie/scratch/s2428892/redip-test/testdata/chr_dict"
 
 start_mode: "redip"
 run_rediploidisation: true
