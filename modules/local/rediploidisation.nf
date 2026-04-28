@@ -8,10 +8,12 @@ process EXTRACT_REDIP_SPECIES {
     path redip_utils
 
     output:
-    path "redip_species.txt"
+    path "rediploidisation/redip_species.txt"
 
     script:
     """
+    mkdir -p rediploidisation
+
     python - <<'PY'
 import sys
 from pathlib import Path
@@ -22,7 +24,7 @@ from redip_utils import read_redip_species_from_genomes_tsv
 
 species = read_redip_species_from_genomes_tsv("${genomes_tsv}")
 
-with open("redip_species.txt", "w") as out:
+with open("rediploidisation/redip_species.txt", "w") as out:
     for sp in species:
         out.write(sp + "\\n")
 PY
@@ -42,16 +44,18 @@ process ROOT_GENE_TREE {
 
     output:
     tuple val(og),
-          path("og_${og}.rooted.treefile"),
-          path("og_${og}.rooting_summary.tsv")
+          path("rediploidisation/rooted_trees/og_${og}.rooted.treefile"),
+          path("rediploidisation/rooting_summaries/og_${og}.rooting_summary.tsv")
 
     script:
     """
+    mkdir -p rediploidisation/rooted_trees rediploidisation/rooting_summaries
+
     python ${root_script} \\
         --tree ${treefile} \\
         --genomes-tsv ${genomes_tsv} \\
-        --output-tree og_${og}.rooted.treefile \\
-        --summary-tsv og_${og}.rooting_summary.tsv \\
+        --output-tree rediploidisation/rooted_trees/og_${og}.rooted.treefile \\
+        --summary-tsv rediploidisation/rooting_summaries/og_${og}.rooting_summary.tsv \\
         --tip-separator '${params.rediploidisation.tip_separator}' \\
         --tree-format ${params.rediploidisation.gene_tree_format}
     """
@@ -68,16 +72,16 @@ process WRITE_BRANCH_DEFS {
     path redip_utils
 
     output:
-    path "branch_definitions"
+    path "rediploidisation/branch_definitions"
 
     script:
     """
-    mkdir -p branch_definitions
+    mkdir -p rediploidisation/branch_definitions
 
     python ${branch_script} \\
         --tree ${species_tree} \\
         --genomes-tsv ${genomes_tsv} \\
-        --output-dir branch_definitions \\
+        --output-dir rediploidisation/branch_definitions \\
         --tree-format ${params.rediploidisation.species_tree_format}
     """
 }
@@ -93,12 +97,14 @@ process CLASSIFY_REDIP_EVENTS {
     path redip_utils
 
     output:
-    tuple val(species), path("${species}.redip_classification.tsv")
+    tuple val(species), path("rediploidisation/classifications/${species}.redip_classification.tsv")
 
     script:
     def tree_list = rooted_trees.collect { it.toString() }.join(' ')
 
     """
+    mkdir -p rediploidisation/classifications
+
     : > ${species}.rooted_gene_trees.nwk
 
     for tree in ${tree_list}; do
@@ -110,7 +116,7 @@ process CLASSIFY_REDIP_EVENTS {
         --target-species ${species} \\
         --treefile ${species}.rooted_gene_trees.nwk \\
         --genomes-tsv ${genomes_tsv} \\
-        --output ${species}.redip_classification.tsv \\
+        --output rediploidisation/classifications/${species}.redip_classification.tsv \\
         --tip-separator '${params.rediploidisation.tip_separator}' \\
         --label-format ${params.rediploidisation.label_format} \\
         --copy-mode ${params.rediploidisation.copy_mode} \\
@@ -131,7 +137,7 @@ process MAKE_REDIP_LINKS {
     path redip_utils
 
     output:
-    tuple val(species), path("${species}.circos_links.tsv")
+    tuple val(species), path("rediploidisation/circos_links/${species}.circos_links.tsv")
 
     script:
     def source = params.rediploidisation.positions_source ?: 'bed'
@@ -165,12 +171,14 @@ process MAKE_REDIP_LINKS {
     }
 
     """
+    mkdir -p rediploidisation/circos_links
+
     python ${links_script} \\
         --species ${species} \\
         --classification-tsv ${classification} \\
         ${position_arg} \\
         --branch-definitions ${branch_definitions}/${species}.branch_definitions.tsv \\
-        --output ${species}.circos_links.tsv \\
+        --output rediploidisation/circos_links/${species}.circos_links.tsv \\
         --tip-separator '${params.rediploidisation.tip_separator}' \\
         --label-format ${params.rediploidisation.label_format} \\
         --position-key-type ${params.rediploidisation.position_key_type} \\
@@ -191,15 +199,17 @@ process PREP_REDIP_CIRCOS {
     path redip_utils
 
     output:
-    tuple val(species), path("${species}")
+    tuple val(species), path("rediploidisation/circos_inputs/${species}")
 
     script:
     """
+    mkdir -p rediploidisation/circos_inputs
+
     python ${prep_script} \\
         --species ${species} \\
         --circos-links ${circos_links} \\
         --chr-bed ${params.chr_dict_dir}/${species}_chr_lengths.bed \\
-        --output-dir ${species}
+        --output-dir rediploidisation/circos_inputs/${species}
     """
 }
 
@@ -211,13 +221,15 @@ process PLOT_REDIP_CIRCOS {
     tuple val(species), path(species_dir)
 
     output:
-    tuple val(species), path("${species}")
+    tuple val(species), path("rediploidisation/circos_plots/${species}")
 
     script:
     """
-    cp -r ${species_dir} ${species}
+    mkdir -p rediploidisation/circos_plots
 
-    cd ${species}
+    cp -r ${species_dir} rediploidisation/circos_plots/${species}
+
+    cd rediploidisation/circos_plots/${species}
 
     ${params.circos_bin} -conf circos.conf
     """
@@ -233,7 +245,7 @@ process REDIP_REPORT {
     path circos_links
 
     output:
-    path "redip_report"
+    path "rediploidisation/report"
 
     script:
     def root_list = rooting_summaries.collect { it.toString() }.join(' ')
@@ -241,7 +253,7 @@ process REDIP_REPORT {
     def link_list = circos_links.collect { it.toString() }.join(' ')
 
     """
-    mkdir -p redip_report
+    mkdir -p rediploidisation/report
 
     {
         first=1
@@ -253,7 +265,7 @@ process REDIP_REPORT {
                 tail -n +2 "\$f"
             fi
         done
-    } > redip_report/rooting_summary.tsv
+    } > rediploidisation/report/rooting_summary.tsv
 
     {
         echo -e "species\\tclassification_rows"
@@ -262,7 +274,7 @@ process REDIP_REPORT {
             n=\$(awk 'NR > 1 { count++ } END { print count + 0 }' "\$f")
             echo -e "\${species}\\t\${n}"
         done
-    } > redip_report/classification_summary.tsv
+    } > rediploidisation/report/classification_summary.tsv
 
     {
         echo -e "species\\tcircos_link_rows"
@@ -271,7 +283,7 @@ process REDIP_REPORT {
             n=\$(awk 'NR > 1 { count++ } END { print count + 0 }' "\$f")
             echo -e "\${species}\\t\${n}"
         done
-    } > redip_report/circos_links_summary.tsv
+    } > rediploidisation/report/circos_links_summary.tsv
     """
 }
 
@@ -331,7 +343,7 @@ workflow REDIPLOIDISATION {
             def rooted_trees = (row.size() == 2 && row[1] instanceof List)
                 ? row[1]
                 : row[1..-1]
-    
+
             tuple(species, rooted_trees)
         }
 
