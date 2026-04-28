@@ -122,29 +122,10 @@ def makeIqtreeChannelFromDir(treeDir) {
         }
 }
 
-// debug
-process DEBUG_CONTAINER_RESOLUTION {
-    tag "debug_container_resolution"
-
-    input:
-    val tool
-
-    output:
-    stdout
-
-    script:
-    def resolved = useContainer(tool)
-    """
-    echo "${tool} -> ${resolved}"
-    """
-}
 
 // Workflow
 workflow {
     main:
-    DEBUG_CONTAINER_RESOLUTION(Channel.fromList(['redip', 'genespace', 'iqtree']))
-    DEBUG_CONTAINER_RESOLUTION.out.view()
-
     genome_repo_publish_ch = Channel.empty()
     genespace_publish_ch = Channel.empty()
     post_outputs_ch = Channel.empty()
