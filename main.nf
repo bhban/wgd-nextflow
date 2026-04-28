@@ -142,20 +142,6 @@ workflow {
         error "--species_tree must be provided when --use_species_tree_for_alerax is true"
     }
 
-    genomes_ch = Channel
-        .fromList(genomes_rows)
-        .map { row ->
-            tuple(
-                row.genome,
-                row.source,
-                row.ploidy,
-                file("${params.gff_dir}/${row.genome}.${params.ext.gff}"),
-                file("${params.protein_dir}/${row.genome}.${params.ext.pep}"),
-                resolveChrDict(row.genome),
-                resolveGenomeFasta(row.genome)
-            )
-        }
-
     genomes_tsv_ch = Channel.value(file(params.genomes_tsv))
 
     /*
@@ -224,6 +210,20 @@ workflow {
          * FULL / PARSED / GENESPACE PIPELINE
          * =========================
          */
+
+        genomes_ch = Channel
+            .fromList(genomes_rows)
+            .map { row ->
+                tuple(
+                    row.genome,
+                    row.source,
+                    row.ploidy,
+                    file("${params.gff_dir}/${row.genome}.${params.ext.gff}"),
+                    file("${params.protein_dir}/${row.genome}.${params.ext.pep}"),
+                    resolveChrDict(row.genome),
+                    resolveGenomeFasta(row.genome)
+                )
+            }
 
         cds_files_ch = Channel.fromPath("${params.cds_dir}/*.cds").collect()
 
