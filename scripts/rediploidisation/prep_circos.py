@@ -138,7 +138,7 @@ stroke_color     = black
 stroke_thickness = 2p
 
 show_label       = yes
-label_font       = aptos
+label_font       = helvetica
 label_radius     = dims(ideogram,radius_outer) + 0.08r
 label_size       = 64p
 label_parallel   = yes
