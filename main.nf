@@ -115,7 +115,9 @@ def makeIqtreeChannelFromDir(treeDir) {
                 treefile,
                 file("${treeDir}/og_${og}_iqtree.ufboot"),
                 file("${treeDir}/og_${og}.iqtree.status"),
-                file("${treeDir}/og_${og}_NT.fasta")
+                file("${treeDir}/og_${og}_NT.fasta"),
+                file("${treeDir}/og_${og}.log"),
+                file("${treeDir}")
             )
         }
 }
@@ -417,13 +419,19 @@ workflow {
 
     macse_report_out = MACSE_REPORT(
         macse_out
-            .map { og, aa, nt, status -> status }
+            .flatMap { og, aa, nt, status, log -> [aa, nt, status, log] }
+            .collect()
+    )
+    
+    post_outputs_ch = post_outputs_ch.mix(
+        macse_out
+            .flatMap { og, aa, nt, status, log -> [aa, nt, status, log] }
             .collect()
     )
 
     post_outputs_ch = post_outputs_ch.mix(macse_report_out)
 
-    iqtree_in = macse_out.filter { og, aa, nt, status ->
+    iqtree_in = macse_out.filter { og, aa, nt, status, log ->
         status.text.trim() == 'OK'
     }
 
@@ -431,9 +439,15 @@ workflow {
 
     iqtree_report_out = IQTREE_REPORT(
         iqtree_out
-            .map { og, treefile, ufboot, status, nt -> status }
+            .flatMap { og, treefile, ufboot, status, nt, log, all_iqtree -> [treefile, ufboot, status, nt, log, all_iqtree] }
             .collect()
     )
+    
+    post_outputs_ch = post_outputs_ch.mix(
+        iqtree_out
+            .flatMap { og, treefile, ufboot, status, nt, log, all_iqtree -> [treefile, ufboot, status, nt, log, all_iqtree] }
+            .collect()
+    )   
 
     post_outputs_ch = post_outputs_ch.mix(iqtree_report_out)
 
