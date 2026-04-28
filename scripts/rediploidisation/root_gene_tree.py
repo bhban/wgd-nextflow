@@ -53,6 +53,15 @@ def root_on_present_outgroup(
         return True, "rooted_on_single_outgroup_tip__species=" + found_species[0]
 
     mrca = tree.get_common_ancestor(outgroup_leaves)
+
+    if mrca is tree:
+    return False, (
+        "outgroup_mrca_is_root__tree_left_unchanged__n_outgroup_tips="
+        + str(n_outgroup_tips)
+        + "__species="
+        + ",".join(found_species)
+    )
+    
     tree.set_outgroup(mrca)
 
     return True, (
