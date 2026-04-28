@@ -278,7 +278,7 @@ workflow REDIPLOIDISATION {
         .map { it.trim() }
         .filter { it }
 
-    iqtree_tree_ch = iqtree_results.map { og, treefile, ufboot, status, nt ->
+    iqtree_tree_ch = iqtree_results.map { og, treefile, ufboot, status, nt, log, all_iqtree ->
         tuple(og, treefile)
     }
 
