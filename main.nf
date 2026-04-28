@@ -214,6 +214,10 @@ workflow {
         genomes_ch = Channel
             .fromList(genomes_rows)
             .map { row ->
+                def fasta = params.annotation?.run
+                    ? resolveGenomeFasta(row.genome)
+                    : null
+        
                 tuple(
                     row.genome,
                     row.source,
@@ -221,7 +225,7 @@ workflow {
                     file("${params.gff_dir}/${row.genome}.${params.ext.gff}"),
                     file("${params.protein_dir}/${row.genome}.${params.ext.pep}"),
                     resolveChrDict(row.genome),
-                    resolveGenomeFasta(row.genome)
+                    fasta
                 )
             }
 
