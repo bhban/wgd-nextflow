@@ -324,7 +324,16 @@ workflow REDIPLOIDISATION {
         redip_utils_ch
     )
 
-    classify_input_ch = redip_species_ch.combine(rooted_trees_ch)
+    classify_input_ch = redip_species_ch
+        .combine(rooted_trees_ch)
+        .map { row ->
+            def species = row[0]
+            def rooted_trees = (row.size() == 2 && row[1] instanceof List)
+                ? row[1]
+                : row[1..-1]
+    
+            tuple(species, rooted_trees)
+        }
 
     CLASSIFY_REDIP_EVENTS(
         classify_input_ch,
