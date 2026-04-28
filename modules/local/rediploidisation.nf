@@ -89,6 +89,7 @@ process WRITE_BRANCH_DEFS {
 
 process CLASSIFY_REDIP_EVENTS {
     tag { species }
+    array (params.array_size as int)
 
     input:
     tuple val(species), path(rooted_trees)
@@ -128,6 +129,7 @@ process CLASSIFY_REDIP_EVENTS {
 
 process MAKE_REDIP_LINKS {
     tag { species }
+    array (params.array_size as int)
 
     input:
     tuple val(species), path(classification)
@@ -192,6 +194,7 @@ process MAKE_REDIP_LINKS {
 
 process PREP_REDIP_CIRCOS {
     tag { species }
+    array (params.array_size as int)
 
     input:
     tuple val(species), path(circos_links)
@@ -216,6 +219,7 @@ process PREP_REDIP_CIRCOS {
 
 process PLOT_REDIP_CIRCOS {
     tag { species }
+    array (params.array_size as int)
 
     input:
     tuple val(species), path(species_dir)
