@@ -1,3 +1,5 @@
+nextflow.enable.dsl=2
+
 process WRITE_ALERAX_MAPPING {
     tag { "og_${og}" }
     array (params.array_size as int)
@@ -252,4 +254,61 @@ process ALERAX_REPORT {
 
     touch ${params.postdir}/alerax/alerax.done
     """
+}
+
+
+
+workflow ALERAX_WORKFLOW {
+
+    take:
+    iqtree_results
+    species_tree
+    models
+
+    main:
+
+    alerax_map_out = WRITE_ALERAX_MAPPING(iqtree_results)
+
+    families_out = WRITE_ALERAX_FAMILIES(
+        alerax_map_out
+            .flatMap { og, mapping, ufboot -> [mapping, ufboot] }
+            .collect()
+    )
+
+    manifest_out = WRITE_ALERAX_MANIFEST(models)
+
+    def alerax_results_out
+
+    if (species_tree) {
+        alerax_in = models
+            .combine(families_out)
+            .combine(species_tree)
+            .map { model, fam, tree ->
+                tuple(fam, tree, model)
+            }
+
+        alerax_results_out = RUN_ALERAX(alerax_in)
+
+    } else {
+        alerax_in = models
+            .combine(families_out)
+            .map { model, fam ->
+                tuple(fam, model)
+            }
+
+        alerax_results_out = RUN_ALERAX_RANDOM(alerax_in)
+    }
+
+    alerax_report_out = ALERAX_REPORT(
+        alerax_results_out
+            .map { model_id, model_dir -> model_dir }
+            .collect(),
+        manifest_out
+    )
+
+    emit:
+    families = families_out
+    manifest = manifest_out
+    results = alerax_results_out
+    report = alerax_report_out
 }
