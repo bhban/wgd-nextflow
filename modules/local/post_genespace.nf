@@ -182,24 +182,21 @@ process MACSE_REPORT {
     """
     mkdir -p ${params.postdir}/macse
 
-    find . -name '*.status' -type f | sort > macse_status_files.txt
-    test -s macse_status_files.txt
+    echo -e "og\\tstatus" > ${params.postdir}/macse/macse_report.tsv
 
-    {
-      echo -e "og\tstatus"
-      while read -r f; do
-        og=\$(basename "\$f" .status | sed 's/^og_//')
-        st=\$(tr -d '\\r' < "\$f")
-        [ -n "\$st" ] || st="FAIL"
-        echo -e "\${og}\t\${st}"
-      done < macse_status_files.txt | sort -k1,1n
-    } > ${params.postdir}/macse/macse_report.tsv
+    find . -name 'og_*.status' -type f | sort | while read -r f; do
+      og=\$(basename "\$f" .status | sed 's/^og_//')
+      st=\$(tr -d '\\r\\n' < "\$f")
+      [ -n "\$st" ] || st="FAIL"
+      echo -e "\${og}\\t\${st}" >> ${params.postdir}/macse/macse_report.tsv
+    done
 
-    awk 'NR>1 && \$2=="OK"{print \$1}' ${params.postdir}/macse/macse_report.tsv \\
+    awk -F'\\t' 'NR > 1 && \$2 == "OK" { print \$1 }' \\
+      ${params.postdir}/macse/macse_report.tsv \\
       > ${params.postdir}/macse/macse_ok_og_list.txt
 
     test -s ${params.postdir}/macse/macse_report.tsv
-    test -s ${params.postdir}/macse/macse_ok_og_list.txt
+    test -f ${params.postdir}/macse/macse_ok_og_list.txt
     """
 }
 
