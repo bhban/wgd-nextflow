@@ -208,18 +208,18 @@ process IQTREE_OG {
     tuple val(og), path(aa), path(nt), path(status), path(macse_log)
 
     output:
-    tuple val(og), path("iqtree")
+    tuple val(og), path("iqtree/og_${og}")
 
     script:
     """
-    mkdir -p iqtree
+    mkdir -p iqtree/og_${og}
 
-    echo "STARTED" > iqtree/og_${og}.iqtree.status
+    echo "STARTED" > iqtree/og_${og}/og_${og}.iqtree.status
 
-    if [ ! -s ${nt} ] || [ "\$(tr -d '\\r' < ${status})" != "OK" ]; then
-        : > iqtree/og_${og}_iqtree.treefile
-        : > iqtree/og_${og}_iqtree.ufboot
-        echo "FAIL" > iqtree/og_${og}.iqtree.status
+    if [ ! -s ${nt} ] || [ "\$(tr -d '\\r\\n' < ${status})" != "OK" ]; then
+        : > iqtree/og_${og}/og_${og}_iqtree.treefile
+        : > iqtree/og_${og}/og_${og}_iqtree.ufboot
+        echo "FAIL" > iqtree/og_${og}/og_${og}.iqtree.status
         exit 0
     fi
 
@@ -231,17 +231,17 @@ process IQTREE_OG {
       -bb 1000 \\
       -wbtl \\
       -redo \\
-      -pre iqtree/og_${og}_iqtree \\
-      > iqtree/og_${og}.log 2>&1
+      -pre iqtree/og_${og}/og_${og}_iqtree \\
+      > iqtree/og_${og}/og_${og}.log 2>&1
     rc=\$?
     set -e
 
-    if [ \$rc -eq 0 ] && [ -s iqtree/og_${og}_iqtree.treefile ] && [ -s iqtree/og_${og}_iqtree.ufboot ]; then
-        echo "OK" > iqtree/og_${og}.iqtree.status
+    if [ \$rc -eq 0 ] && [ -s iqtree/og_${og}/og_${og}_iqtree.treefile ] && [ -s iqtree/og_${og}/og_${og}_iqtree.ufboot ]; then
+        echo "OK" > iqtree/og_${og}/og_${og}.iqtree.status
     else
-        : > iqtree/og_${og}_iqtree.treefile
-        : > iqtree/og_${og}_iqtree.ufboot
-        echo "FAIL" > iqtree/og_${og}.iqtree.status
+        : > iqtree/og_${og}/og_${og}_iqtree.treefile
+        : > iqtree/og_${og}/og_${og}_iqtree.ufboot
+        echo "FAIL" > iqtree/og_${og}/og_${og}.iqtree.status
     fi
     """
 }
