@@ -7,7 +7,7 @@ gff_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/gff_truncated"
 protein_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/protein"
 cds_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/cds"
 chr_dict_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/chr_dict"
-fasta_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/fasta"
+fasta_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/testdata/assemblies_truncated"
 
 ext:
   gff: "gff3"
@@ -20,7 +20,7 @@ annotation:
   tool: "annevo"
 
 annevo:
-  model_path: "/path/to/ANNEVO_model/ANNEVO_Magnoliopsida.pt"
+  model_path: "/opt/ANNEVO/ANNEVO_model/ANNEVO_Magnoliopsida.pt"
   batch_size: 8
   extra_args: "--show_log"
   cleanup_tmp: true
