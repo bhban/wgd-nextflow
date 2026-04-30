@@ -37,7 +37,7 @@ process ROOT_GENE_TREE {
     array (params.array_size as int)
 
     input:
-    tuple val(og), path(treefile)
+    tuple val(og), path(iqtree_dir)
     path genomes_tsv
     path root_script
     path redip_utils
@@ -51,8 +51,10 @@ process ROOT_GENE_TREE {
     """
     mkdir -p rediploidisation/rooted_trees rediploidisation/rooting_summaries
 
+    test -s ${iqtree_dir}/og_${og}_iqtree.treefile
+
     python ${root_script} \\
-        --tree ${treefile} \\
+        --tree ${iqtree_dir}/og_${og}_iqtree.treefile \\
         --genomes-tsv ${genomes_tsv} \\
         --output-tree rediploidisation/rooted_trees/og_${og}.rooted.treefile \\
         --summary-tsv rediploidisation/rooting_summaries/og_${og}.rooting_summary.tsv \\
