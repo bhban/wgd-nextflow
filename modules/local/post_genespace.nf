@@ -208,48 +208,18 @@ process IQTREE_OG {
     tuple val(og), path(aa), path(nt), path(status), path(macse_log)
 
     output:
-    tuple val(og),
-          path("iqtree/og_${og}_iqtree.treefile"),
-          path("iqtree/og_${og}_iqtree.ufboot"),
-          path("iqtree/og_${og}.iqtree.status"),
-          path("iqtree/og_${og}_NT.fasta"),
-          path("iqtree/og_${og}.log"),
-          path("iqtree/og_${og}_iqtree.*")
+    tuple val(og), path("iqtree")
 
     script:
     """
     mkdir -p iqtree
 
-    rm -f iqtree/og_${og}.iqtree.status iqtree/og_${og}_iqtree.treefile iqtree/og_${og}_iqtree.ufboot iqtree/og_${og}.log
-
-    cp ${nt} iqtree/og_${og}_NT.fasta
-
     echo "STARTED" > iqtree/og_${og}.iqtree.status
 
-    on_exit() {
-        rc=\$?
-        if [ ! -s iqtree/og_${og}.iqtree.status ] || grep -qx 'STARTED' iqtree/og_${og}.iqtree.status; then
-            : > iqtree/og_${og}_iqtree.treefile
-            : > iqtree/og_${og}_iqtree.ufboot
-            echo "FAIL" > iqtree/og_${og}.iqtree.status
-        fi
-        exit \$rc
-    }
-    trap on_exit EXIT TERM INT
-
-    if [ ! -s ${nt} ]; then
-        echo "FAIL" > iqtree/og_${og}.iqtree.status
+    if [ ! -s ${nt} ] || [ "\$(tr -d '\\r' < ${status})" != "OK" ]; then
         : > iqtree/og_${og}_iqtree.treefile
         : > iqtree/og_${og}_iqtree.ufboot
-        trap - EXIT TERM INT
-        exit 0
-    fi
-
-    if [ ! -s ${status} ] || [ "\$(tr -d '\\r' < ${status})" != "OK" ]; then
         echo "FAIL" > iqtree/og_${og}.iqtree.status
-        : > iqtree/og_${og}_iqtree.treefile
-        : > iqtree/og_${og}_iqtree.ufboot
-        trap - EXIT TERM INT
         exit 0
     fi
 
@@ -273,8 +243,6 @@ process IQTREE_OG {
         : > iqtree/og_${og}_iqtree.ufboot
         echo "FAIL" > iqtree/og_${og}.iqtree.status
     fi
-
-    trap - EXIT TERM INT
     """
 }
 
@@ -282,7 +250,7 @@ process IQTREE_REPORT {
     tag "iqtree_report"
 
     input:
-    path iqtree_results
+    path iqtree_dirs
 
     output:
     path("${params.postdir}/iqtree/iqtree_report.tsv")
@@ -292,23 +260,20 @@ process IQTREE_REPORT {
     """
     mkdir -p ${params.postdir}/iqtree
 
-    find . -name '*.iqtree.status' -type f | sort > iqtree_status_files.txt
-    test -s iqtree_status_files.txt
+    echo -e "og\\tstatus" > ${params.postdir}/iqtree/iqtree_report.tsv
 
-    {
-      echo -e "og\tstatus"
-      while read -r f; do
-        og=\$(basename "\$f" .iqtree.status | sed 's/^og_//')
-        st=\$(tr -d '\\r' < "\$f")
-        [ -n "\$st" ] || st="FAIL"
-        echo -e "\${og}\t\${st}"
-      done < iqtree_status_files.txt | sort -k1,1n
-    } > ${params.postdir}/iqtree/iqtree_report.tsv
+    find . -name 'og_*.iqtree.status' -type f | sort | while read -r f; do
+      og=\$(basename "\$f" .iqtree.status | sed 's/^og_//')
+      st=\$(tr -d '\\r\\n' < "\$f")
+      [ -n "\$st" ] || st="FAIL"
+      echo -e "\${og}\\t\${st}" >> ${params.postdir}/iqtree/iqtree_report.tsv
+    done
 
-    awk 'NR>1 && \$2=="OK"{print \$1}' ${params.postdir}/iqtree/iqtree_report.tsv \\
+    awk -F'\\t' 'NR > 1 && \$2 == "OK" { print \$1 }' \\
+      ${params.postdir}/iqtree/iqtree_report.tsv \\
       > ${params.postdir}/iqtree/iqtree_ok_og_list.txt
 
     test -s ${params.postdir}/iqtree/iqtree_report.tsv
-    test -s ${params.postdir}/iqtree/iqtree_ok_og_list.txt
+    test -f ${params.postdir}/iqtree/iqtree_ok_og_list.txt
     """
 }
