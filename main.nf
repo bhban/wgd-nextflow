@@ -99,7 +99,7 @@ def resolveAleraxModels() {
     ])
 }
 
-def makeIqtreeChannelFromDir(treeDir) {
+def makeIqtreeDirChannelFromDir(treeDir) {
     Channel
         .fromPath("${treeDir}/og_*_iqtree.treefile", checkIfExists: true)
         .map { treefile ->
@@ -109,16 +109,7 @@ def makeIqtreeChannelFromDir(treeDir) {
             }
 
             def og = m[0][1]
-
-            tuple(
-                og,
-                treefile,
-                file("${treeDir}/og_${og}_iqtree.ufboot"),
-                file("${treeDir}/og_${og}.iqtree.status"),
-                file("${treeDir}/og_${og}_NT.fasta"),
-                file("${treeDir}/og_${og}.log"),
-                file("${treeDir}")
-            )
+            tuple(og, file(treeDir))
         }
 }
 
@@ -443,31 +434,48 @@ workflow {
         iqtree_in = macse_out.filter { og, aa, nt, status, log ->
             status.text.trim() == 'OK'
         }
-
+        
         iqtree_out = IQTREE_OG(iqtree_in)
-
-        iqtree_all_outputs_ch = iqtree_out
-            .flatMap { og, treefile, ufboot, status, nt, log, all_iqtree ->
-                [treefile, ufboot, status, nt, log, all_iqtree]
-            }
+        
+        iqtree_dirs_ch = iqtree_out
+            .map { og, iqtree_dir -> iqtree_dir }
             .collect()
-
-        iqtree_report_out = IQTREE_REPORT(iqtree_all_outputs_ch)
-
-        post_outputs_ch = post_outputs_ch.mix(iqtree_all_outputs_ch)
+        
+        iqtree_report_out = IQTREE_REPORT(iqtree_dirs_ch)
+        
+        post_outputs_ch = post_outputs_ch.mix(iqtree_dirs_ch)
         post_outputs_ch = post_outputs_ch.mix(iqtree_report_out)
-
+        
+        iqtree_for_alerax_ch = iqtree_out
+            .join(
+                macse_out
+                    .filter { og, aa, nt, status, log ->
+                        status.text.trim() == 'OK'
+                    }
+                    .map { og, aa, nt, status, log ->
+                        tuple(og, nt)
+                    }
+            )
+            .map { og, iqtree_dir, nt ->
+                tuple(og, iqtree_dir, nt)
+            }
+        
+        iqtree_for_redip_ch = iqtree_out
+            .map { og, iqtree_dir ->
+                tuple(og, iqtree_dir)
+            }
+        
         if (params.run_alerax) {
             def species_tree_ch = params.use_species_tree_for_alerax
                 ? Channel.value(file(species_tree_path))
                 : Channel.empty()
-
+        
             def alerax_out = ALERAX_WORKFLOW(
-                iqtree_out,
+                iqtree_for_alerax_ch,
                 species_tree_ch,
                 alerax_models_ch
             )
-
+        
             post_outputs_ch = post_outputs_ch.mix(alerax_out.families)
             post_outputs_ch = post_outputs_ch.mix(alerax_out.manifest)
             post_outputs_ch = post_outputs_ch.mix(
@@ -480,24 +488,24 @@ workflow {
             if (!species_tree_path) {
                 error "--species_tree must be provided when --run_rediploidisation is true"
             }
-
+        
             def redip_gene_trees_dir = params.rediploidisation?.gene_trees_dir?.toString()?.trim()
-
+        
             def redip_iqtree_ch = redip_gene_trees_dir
                 ? makeIqtreeChannelFromDir(redip_gene_trees_dir)
-                : iqtree_out
-
+                : iqtree_for_redip_ch
+        
             def redip_genespace_wd_ch = params.rediploidisation?.genespace_wd?.toString()?.trim()
                 ? Channel.value(file(params.rediploidisation.genespace_wd))
                 : genespace_ready_out[0]
-
+        
             def redip_out = REDIPLOIDISATION(
                 genomes_tsv_ch,
                 Channel.value(file(species_tree_path)),
                 redip_iqtree_ch,
                 redip_genespace_wd_ch
             )
-
+        
             post_outputs_ch = post_outputs_ch.mix(
                 redip_out.rooted_trees.flatMap { og, tree, summary -> [tree, summary] }.collect()
             )
@@ -513,7 +521,6 @@ workflow {
             )
             post_outputs_ch = post_outputs_ch.mix(redip_out.report)
         }
-    }
 
     /*
      * =========================
