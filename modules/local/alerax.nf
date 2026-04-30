@@ -278,17 +278,21 @@ workflow ALERAX_WORKFLOW {
 
     families_out = WRITE_ALERAX_FAMILIES(
         alerax_map_out
-            .flatMap { og, mapping, ufboot -> [mapping, ufboot] }
+            .flatMap { og, mapping, ufboot ->
+                [mapping, ufboot]
+            }
             .collect()
     )
+
+    families_file_ch = families_out[0]
 
     manifest_out = WRITE_ALERAX_MANIFEST(models)
 
     def alerax_results_out
 
-    if (species_tree) {
+    if (params.use_species_tree_for_alerax) {
         alerax_in = models
-            .combine(families_out)
+            .combine(families_file_ch)
             .combine(species_tree)
             .map { model, fam, tree ->
                 tuple(fam, tree, model)
@@ -298,7 +302,7 @@ workflow ALERAX_WORKFLOW {
 
     } else {
         alerax_in = models
-            .combine(families_out)
+            .combine(families_file_ch)
             .map { model, fam ->
                 tuple(fam, model)
             }
@@ -308,7 +312,9 @@ workflow ALERAX_WORKFLOW {
 
     alerax_report_out = ALERAX_REPORT(
         alerax_results_out
-            .map { model_id, model_dir -> model_dir }
+            .map { model_id, model_dir ->
+                model_dir
+            }
             .collect(),
         manifest_out
     )
