@@ -521,7 +521,7 @@ workflow {
             )
             post_outputs_ch = post_outputs_ch.mix(redip_out.report)
         }
-
+    }
     /*
      * =========================
      * SINGLE PUBLISH BLOCK
