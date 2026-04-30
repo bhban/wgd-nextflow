@@ -8,15 +8,24 @@ from pathlib import Path
 import pandas as pd
 
 
-def parse_bool(value: str) -> bool:
+def parse_outgroup_value(value: str) -> bool:
     v = str(value).strip().lower()
-    if v in {"yes", "true", "1"}:
+
+    if v in {"yes", "true", "t", "y"}:
         return True
-    if v in {"no", "false", "0", ""}:
+
+    if v in {"no", "false", "f", "n", "0", "", "none", "na", "nan"}:
         return False
-    raise SystemExit(
-        f"Could not parse boolean value '{value}'. Use yes/no, true/false, or 1/0."
-    )
+
+    try:
+        tier = int(v)
+    except ValueError:
+        raise SystemExit(
+            f"Could not parse outgroup value '{value}'. "
+            "Use yes/no, true/false, 1/0, or positive integer tiers."
+        )
+
+    return tier > 0
 
 
 def load_outgroup_genomes(genomes_tsv: Path, require_outgroup: bool) -> set[str]:
@@ -38,7 +47,7 @@ def load_outgroup_genomes(genomes_tsv: Path, require_outgroup: bool) -> set[str]
     return {
         row["genome_id"]
         for _, row in df.iterrows()
-        if parse_bool(row["outgroup"])
+        if parse_outgroup_value(row["outgroup"])
     }
 
 
