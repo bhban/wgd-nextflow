@@ -175,7 +175,7 @@ workflow {
         def redip_out = REDIPLOIDISATION(
             genomes_tsv_ch,
             Channel.value(file(species_tree_path)),
-            makeIqtreeChannelFromDir(params.rediploidisation.gene_trees_dir),
+            makeIqtreeDirChannelFromDir(params.rediploidisation.gene_trees_dir),
             redip_genespace_wd_ch
         )
 
@@ -492,7 +492,7 @@ workflow {
             def redip_gene_trees_dir = params.rediploidisation?.gene_trees_dir?.toString()?.trim()
         
             def redip_iqtree_ch = redip_gene_trees_dir
-                ? makeIqtreeChannelFromDir(redip_gene_trees_dir)
+                ? makeIqtreeDirChannelFromDir(redip_gene_trees_dir)
                 : iqtree_for_redip_ch
         
             def redip_genespace_wd_ch = params.rediploidisation?.genespace_wd?.toString()?.trim()
