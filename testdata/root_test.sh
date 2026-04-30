@@ -1,3 +1,5 @@
+#!/bin/bash
+
 mkdir -p rooted_trees rooting_summaries
 
 for tree in tree_*.nwk; do
