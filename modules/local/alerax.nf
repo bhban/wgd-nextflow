@@ -1,29 +1,42 @@
+nextflow.enable.dsl=2
+
 process WRITE_ALERAX_MAPPING {
     tag { "og_${og}" }
     array (params.array_size as int)
 
     input:
-    tuple val(og), path(treefile), path(ufboot), path(status), path(nt)
+    tuple val(og), path(iqtree_dir), path(nt)
 
     output:
-    tuple val(og), path("og_${og}.mapping.tsv"), path("og_${og}_iqtree.ufboot")
+    tuple val(og),
+          path("alerax/gene_to_species_mapping/og_${og}.mapping.tsv"),
+          path("alerax/gene_trees/og_${og}_iqtree.ufboot")
 
     script:
     """
+    mkdir -p alerax/gene_to_species_mapping
+    mkdir -p alerax/gene_trees
+
+    treefile="${iqtree_dir}/og_${og}_iqtree.treefile"
+    ufboot="${iqtree_dir}/og_${og}_iqtree.ufboot"
+    status="${iqtree_dir}/og_${og}.iqtree.status"
+
     if [ ! -s ${nt} ]; then
-        echo "Missing NT fasta for og_${og}" > og_${og}.mapping.log
+        echo "Missing NT fasta for og_${og}" > alerax/gene_to_species_mapping/og_${og}.mapping.log
         exit 1
     fi
 
-    if [ ! -s ${status} ] || [ "\$(tr -d '\\r' < ${status})" != "OK" ]; then
-        echo "IQ-TREE status is not OK for og_${og}" > og_${og}.mapping.log
+    if [ ! -s "\$status" ] || [ "\$(tr -d '\\r\\n' < "\$status")" != "OK" ]; then
+        echo "IQ-TREE status is not OK for og_${og}" > alerax/gene_to_species_mapping/og_${og}.mapping.log
         exit 1
     fi
 
-    if [ ! -s ${ufboot} ]; then
-        echo "Missing ufboot for og_${og}" > og_${og}.mapping.log
+    if [ ! -s "\$ufboot" ]; then
+        echo "Missing ufboot for og_${og}" > alerax/gene_to_species_mapping/og_${og}.mapping.log
         exit 1
     fi
+
+    cp "\$ufboot" alerax/gene_trees/og_${og}_iqtree.ufboot
 
     awk '
       /^>/{
@@ -37,10 +50,10 @@ process WRITE_ALERAX_MAPPING {
           seen[h]=1
         }
       }
-    ' ${nt} > og_${og}.mapping.tsv
+    ' ${nt} > alerax/gene_to_species_mapping/og_${og}.mapping.tsv
 
-    test -s og_${og}.mapping.tsv
-    test -s ${ufboot}
+    test -s alerax/gene_to_species_mapping/og_${og}.mapping.tsv
+    test -s alerax/gene_trees/og_${og}_iqtree.ufboot
     """
 }
 
@@ -52,30 +65,26 @@ process WRITE_ALERAX_FAMILIES {
 
     output:
     path("${params.postdir}/alerax/families.txt")
+    path("${params.postdir}/alerax/gene_to_species_mapping")
 
     script:
     """
     mkdir -p ${params.postdir}/alerax
-    mkdir -p ${params.postdir}/iqtree
     mkdir -p ${params.postdir}/alerax/gene_to_species_mapping
 
-    for f in og_*_iqtree.ufboot; do
-      [ -e "\$f" ] || continue
-      cp "\$f" ${params.postdir}/iqtree/
-    done
-
-    for f in og_*.mapping.tsv; do
-      [ -e "\$f" ] || continue
-      cp "\$f" ${params.postdir}/alerax/gene_to_species_mapping/
-    done
+    find . -name 'og_*.mapping.tsv' -type f -exec cp {} ${params.postdir}/alerax/gene_to_species_mapping/ \\;
 
     {
       echo "[FAMILIES]"
-      for uf in ${params.postdir}/iqtree/og_*_iqtree.ufboot; do
+
+      for uf in \$(find . -name 'og_*_iqtree.ufboot' -type f | sort); do
         [ -s "\$uf" ] || continue
+
         og=\$(basename "\$uf" _iqtree.ufboot | sed 's/^og_//')
         mp=${params.postdir}/alerax/gene_to_species_mapping/og_\${og}.mapping.tsv
+
         [ -s "\$mp" ] || continue
+
         echo "- family_\${og}"
         echo "gene_tree = \$(realpath "\$uf")"
         echo "mapping = \$(realpath "\$mp")"
@@ -93,7 +102,7 @@ process WRITE_ALERAX_MANIFEST {
     val models
 
     output:
-    path("model_manifest.tsv")
+    path("${params.postdir}/alerax/model_manifest.tsv")
 
     script:
     def lines = models.collect { m ->
@@ -101,14 +110,16 @@ process WRITE_ALERAX_MANIFEST {
     }.join('\n')
 
     """
+    mkdir -p ${params.postdir}/alerax
+
     {
       echo -e "model_id\trec_model\tmodel_parametrization\tgene_tree_samples"
       cat <<'EOF'
 ${lines}
 EOF
-    } > model_manifest.tsv
+    } > ${params.postdir}/alerax/model_manifest.tsv
 
-    test -s model_manifest.tsv
+    test -s ${params.postdir}/alerax/model_manifest.tsv
     """
 }
 
@@ -137,13 +148,13 @@ process RUN_ALERAX {
     export TMP="\$PWD/mpi_tmp"
     export OMPI_MCA_orte_tmpdir_base="\$PWD/mpi_tmp"
 
-    mpiexec --mca orte_tmpdir_base "\$PWD/mpi_tmp" -np ${task.cpus} ${params.alerax_bin} \
-      -f ${families} \
-      -s ${species_tree} \
-      -p alerax/${model_id}/output \
-      -r ${rec_model} \
-      --model-parametrization ${model_param} \
-      --gene-tree-samples ${gene_tree_samples} \
+    mpiexec --mca orte_tmpdir_base "\$PWD/mpi_tmp" -np ${task.cpus} ${params.alerax_bin} \\
+      -f ${families} \\
+      -s ${species_tree} \\
+      -p alerax/${model_id}/output \\
+      -r ${rec_model} \\
+      --model-parametrization ${model_param} \\
+      --gene-tree-samples ${gene_tree_samples} \\
       > alerax/${model_id}/alerax.log 2>&1
 
     test -d alerax/${model_id}/output
@@ -185,13 +196,13 @@ process RUN_ALERAX_RANDOM {
     export TMP="\$PWD/mpi_tmp"
     export OMPI_MCA_orte_tmpdir_base="\$PWD/mpi_tmp"
 
-    mpiexec --mca orte_tmpdir_base "\$PWD/mpi_tmp" -np ${task.cpus} ${params.alerax_bin} \
-      -f ${families} \
-      -s random \
-      -p alerax/${model_id}/output \
-      -r ${rec_model} \
-      --model-parametrization ${model_param} \
-      --gene-tree-samples ${gene_tree_samples} \
+    mpiexec --mca orte_tmpdir_base "\$PWD/mpi_tmp" -np ${task.cpus} ${params.alerax_bin} \\
+      -f ${families} \\
+      -s random \\
+      -p alerax/${model_id}/output \\
+      -r ${rec_model} \\
+      --model-parametrization ${model_param} \\
+      --gene-tree-samples ${gene_tree_samples} \\
       > alerax/${model_id}/alerax.log 2>&1
 
     test -d alerax/${model_id}/output
@@ -216,19 +227,18 @@ process ALERAX_REPORT {
     path model_manifest
 
     output:
-    path("${params.postdir}/alerax_report.tsv")
-    path("${params.postdir}/alerax.done")
+    path("${params.postdir}/alerax/alerax_report.tsv")
+    path("${params.postdir}/alerax/alerax.done")
 
     script:
     """
-    mkdir -p ${params.postdir}
+    mkdir -p ${params.postdir}/alerax
 
     {
       echo -e "model_id\\trec_model\\tmodel_parametrization\\tgene_tree_samples\\tstatus\\tresult_dir\\tlog_file"
 
-      for d in *; do
+      for d in */; do
         [ -d "\$d" ] || continue
-        [ "\$d" = "${params.postdir}" ] && continue
 
         model_id=\$(basename "\$d")
 
@@ -247,8 +257,71 @@ process ALERAX_REPORT {
 
         echo -e "\${model_id}\\t\${rec_model}\\t\${model_param}\\t\${gts}\\t\${status}\\t\${result_dir}\\t\${log_file}"
       done | sort -k1,1
-    } > ${params.postdir}/alerax_report.tsv
+    } > ${params.postdir}/alerax/alerax_report.tsv
 
-    touch ${params.postdir}/alerax.done
+    touch ${params.postdir}/alerax/alerax.done
     """
+}
+
+
+
+workflow ALERAX_WORKFLOW {
+
+    take:
+    iqtree_results
+    species_tree
+    models
+
+    main:
+
+    alerax_map_out = WRITE_ALERAX_MAPPING(iqtree_results)
+
+    families_out = WRITE_ALERAX_FAMILIES(
+        alerax_map_out
+            .flatMap { og, mapping, ufboot ->
+                [mapping, ufboot]
+            }
+            .collect()
+    )
+
+    families_file_ch = families_out[0]
+
+    manifest_out = WRITE_ALERAX_MANIFEST(models)
+
+    def alerax_results_out
+
+    if (params.use_species_tree_for_alerax) {
+        alerax_in = models
+            .combine(families_file_ch)
+            .combine(species_tree)
+            .map { model, fam, tree ->
+                tuple(fam, tree, model)
+            }
+
+        alerax_results_out = RUN_ALERAX(alerax_in)
+
+    } else {
+        alerax_in = models
+            .combine(families_file_ch)
+            .map { model, fam ->
+                tuple(fam, model)
+            }
+
+        alerax_results_out = RUN_ALERAX_RANDOM(alerax_in)
+    }
+
+    alerax_report_out = ALERAX_REPORT(
+        alerax_results_out
+            .map { model_id, model_dir ->
+                model_dir
+            }
+            .collect(),
+        manifest_out
+    )
+
+    emit:
+    families = families_out
+    manifest = manifest_out
+    results = alerax_results_out
+    report = alerax_report_out
 }

@@ -1,7 +1,9 @@
 FROM continuumio/miniconda3:24.7.1-0
 
 LABEL software="ANNEVO" \
-      git_commit="b07cb8e344e4c49165c8f818d9bf7708a495240b" \
+      software_version="2.2.3" \
+      container_version="1.0" \
+      git_commit="2832e5f2526a7abcba978b62f70b46063e25ea9e" \
       org.opencontainers.image.source="https://github.com/bhban/wgd-nextflow"
       
 USER root
@@ -15,7 +17,7 @@ WORKDIR /opt
 # clone repo
 RUN git clone https://github.com/xjtu-omics/ANNEVO.git \
     && cd ANNEVO \
-    && git checkout b07cb8e344e4c49165c8f818d9bf7708a495240b
+    && git checkout 2832e5f2526a7abcba978b62f70b46063e25ea9e
 
 WORKDIR /opt/ANNEVO
 

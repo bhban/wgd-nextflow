@@ -27,6 +27,19 @@ This pipeline performs:
 
 ---
 
+## Optional: Pre-pull containers (recommended for HPC)
+
+To avoid repeated downloads and filesystem latency issues, you can pre-pull all containers:
+
+```
+  bash utils/pull_containers.sh
+```
+
+If .sif files are present in the apptainer/ directory, the pipeline will
+use them automatically. Otherwise, containers will be pulled from GHCR.
+
+---
+
 ## Input files
 
 ### 1. genomes.tsv
