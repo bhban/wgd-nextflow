@@ -5,31 +5,38 @@ process WRITE_ALERAX_MAPPING {
     array (params.array_size as int)
 
     input:
-    tuple val(og), path(treefile), path(ufboot), path(status), path(nt), path(iqtree_log), path(iqtree_all)
+    tuple val(og), path(iqtree_dir), path(nt)
 
     output:
     tuple val(og),
           path("alerax/gene_to_species_mapping/og_${og}.mapping.tsv"),
-          path(ufboot)
+          path("alerax/gene_trees/og_${og}_iqtree.ufboot")
 
     script:
     """
     mkdir -p alerax/gene_to_species_mapping
+    mkdir -p alerax/gene_trees
+
+    treefile="${iqtree_dir}/og_${og}_iqtree.treefile"
+    ufboot="${iqtree_dir}/og_${og}_iqtree.ufboot"
+    status="${iqtree_dir}/og_${og}.iqtree.status"
 
     if [ ! -s ${nt} ]; then
         echo "Missing NT fasta for og_${og}" > alerax/gene_to_species_mapping/og_${og}.mapping.log
         exit 1
     fi
 
-    if [ ! -s ${status} ] || [ "\$(tr -d '\\r' < ${status})" != "OK" ]; then
+    if [ ! -s "\$status" ] || [ "\$(tr -d '\\r\\n' < "\$status")" != "OK" ]; then
         echo "IQ-TREE status is not OK for og_${og}" > alerax/gene_to_species_mapping/og_${og}.mapping.log
         exit 1
     fi
 
-    if [ ! -s ${ufboot} ]; then
+    if [ ! -s "\$ufboot" ]; then
         echo "Missing ufboot for og_${og}" > alerax/gene_to_species_mapping/og_${og}.mapping.log
         exit 1
     fi
+
+    cp "\$ufboot" alerax/gene_trees/og_${og}_iqtree.ufboot
 
     awk '
       /^>/{
@@ -46,7 +53,7 @@ process WRITE_ALERAX_MAPPING {
     ' ${nt} > alerax/gene_to_species_mapping/og_${og}.mapping.tsv
 
     test -s alerax/gene_to_species_mapping/og_${og}.mapping.tsv
-    test -s ${ufboot}
+    test -s alerax/gene_trees/og_${og}_iqtree.ufboot
     """
 }
 
