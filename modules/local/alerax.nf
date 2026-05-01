@@ -285,8 +285,11 @@ workflow ALERAX_WORKFLOW {
     )
 
     families_file_ch = families_out[0]
+    families_mapping_dir_ch = families_out[1]
+    families_publish_ch = families_file_ch.mix(families_mapping_dir_ch)
 
     manifest_out = WRITE_ALERAX_MANIFEST(models)
+    manifest_file_ch = manifest_out[0]
 
     def alerax_results_out
 
@@ -316,12 +319,16 @@ workflow ALERAX_WORKFLOW {
                 model_dir
             }
             .collect(),
-        manifest_out
+        manifest_file_ch
     )
 
+    alerax_report_tsv_ch = alerax_report_out[0]
+    alerax_done_ch = alerax_report_out[1]
+    alerax_report_publish_ch = alerax_report_tsv_ch.mix(alerax_done_ch)
+
     emit:
-    families = families_out
-    manifest = manifest_out
+    families = families_publish_ch
+    manifest = manifest_file_ch
     results = alerax_results_out
-    report = alerax_report_out
+    report = alerax_report_publish_ch
 }
