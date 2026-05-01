@@ -7,16 +7,16 @@ sif_paths:
   gffutils: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/gffutils_1.0.sif"
   redip: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip_1.0.sif"
 
-genomes_tsv: "/exports/eddie/scratch/s2428892/redip-test/input/genomes_Prim.tsv"
-species_tree: "/exports/eddie/scratch/s2428892/redip-test/input/species_tree_Prim.nwk"
+genomes_tsv: "/exports/eddie/scratch/s2428892/nf-ericales/input/genomes_Prim.tsv"
+species_tree: "/exports/eddie/scratch/s2428892/nf-ericales/input/species_tree_Prim.nwk"
 
 working_dir: "workingDir"
 postdir: "post_genespace"
 
-gff_dir: "/exports/eddie/scratch/s2428892/redip-test/input/gff"
-protein_dir: "/exports/eddie/scratch/s2428892/redip-test/input/protein"
-cds_dir: "/exports/eddie/scratch/s2428892/redip-test/input/cds"
-chr_dict_dir: "/exports/eddie/scratch/s2428892/redip-test/input/chr_dict"
+gff_dir: "/exports/eddie/scratch/s2428892/nf-ericales/input/gff"
+protein_dir: "/exports/eddie/scratch/s2428892/nf-ericales/input/protein"
+cds_dir: "/exports/eddie/scratch/s2428892/nf-ericales/input/cds"
+chr_dict_dir: "/exports/eddie/scratch/s2428892/nf-ericales/input/chr_dict"
 
 
 start_mode: "full"
