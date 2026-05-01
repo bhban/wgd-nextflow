@@ -27,9 +27,12 @@ def resolveGenomeFasta(genome) {
         "fna.gz"
     ]
 
-    for (ext in exts) {
-        def fasta = file("${params.fasta_dir}/${genome}.${ext}")
-        if (fasta.exists()) return fasta
+    def found_ext = exts.find { ext ->
+        file("${params.fasta_dir}/${genome}.${ext}").exists()
+    }
+
+    if (found_ext) {
+        return file("${params.fasta_dir}/${genome}.${found_ext}")
     }
 
     throw new IllegalArgumentException(
