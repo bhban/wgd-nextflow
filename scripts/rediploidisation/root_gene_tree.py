@@ -235,42 +235,91 @@ def root_on_tiered_outgroups(
 
     Lower tier numbers are considered more basal.
 
-    For each tier:
-      - skip if no species from that tier are present in the gene tree
-      - root on a single present tip if only one matching tip exists
-      - otherwise root on the MRCA of all matching tips
-      - if the MRCA is the whole tree, try the next tier inward
+    Logic:
+      - Find the most basal tier that has at least one tip present in the tree.
+      - Root on that tier only.
+      - If one matching tip is present, root on that tip.
+      - If multiple matching tips are present, root on their MRCA.
+      - If that MRCA is the whole tree, leave the tree unchanged and record this.
+      - Only move to the next tier if no tips from the current tier are present.
     """
 
     if not outgroup_tiers:
         return False, "no_outgroup_species_defined"
 
-    attempt_messages: list[str] = []
+    absent_tier_messages: list[str] = []
 
     for tier in sorted(outgroup_tiers):
         candidate_species = outgroup_tiers[tier]
 
-        rooted, message = root_on_candidate_species(
-            tree=tree,
-            candidate_species=candidate_species,
-            tip_separator=tip_separator,
-        )
+        candidate_leaves = [
+            leaf for leaf in tree.iter_leaves()
+            if get_species(leaf.name, tip_separator) in candidate_species
+        ]
 
-        tier_message = (
+        if len(candidate_leaves) == 0:
+            absent_tier_messages.append(
+                "tier="
+                + str(tier)
+                + "__defined_species="
+                + ",".join(sorted(candidate_species))
+                + "__no_tips_present"
+            )
+            continue
+
+        found_species = sorted({
+            get_species(leaf.name, tip_separator)
+            for leaf in candidate_leaves
+        })
+
+        n_candidate_tips = len(candidate_leaves)
+
+        if n_candidate_tips == 1:
+            tree.set_outgroup(candidate_leaves[0])
+            return True, (
+                "tier="
+                + str(tier)
+                + "__defined_species="
+                + ",".join(sorted(candidate_species))
+                + "__rooted_on_single_outgroup_tip"
+                + "__species="
+                + found_species[0]
+            )
+
+        mrca = tree.get_common_ancestor(candidate_leaves)
+
+        if mrca is tree:
+            return False, (
+                "tier="
+                + str(tier)
+                + "__defined_species="
+                + ",".join(sorted(candidate_species))
+                + "__outgroup_tips_present_but_mrca_is_root"
+                + "__tree_left_unchanged"
+                + "__n_outgroup_tips="
+                + str(n_candidate_tips)
+                + "__species="
+                + ",".join(found_species)
+            )
+
+        tree.set_outgroup(mrca)
+
+        return True, (
             "tier="
             + str(tier)
             + "__defined_species="
             + ",".join(sorted(candidate_species))
-            + "__"
-            + message
+            + "__rooted_on_outgroup_mrca"
+            + "__n_outgroup_tips="
+            + str(n_candidate_tips)
+            + "__species="
+            + ",".join(found_species)
         )
 
-        attempt_messages.append(tier_message)
-
-        if rooted:
-            return True, tier_message
-
-    return False, "no_rootable_outgroup_tier__" + " || ".join(attempt_messages)
+    return False, (
+        "no_outgroup_tips_present_in_any_tier__"
+        + " || ".join(absent_tier_messages)
+    )
 
 
 def write_summary(path: str, tree_id: str, status: str, message: str) -> None:
