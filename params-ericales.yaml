@@ -1,0 +1,41 @@
+sif_paths:
+  genespace: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/genespace_1.1.sif"
+  macse: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/macse_1.0.sif"
+  iqtree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/iqtree_1.0.sif"
+  alerax: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/alerax_1.0.sif"
+  annevo: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/annevo_1.0.sif"
+  gffutils: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/gffutils_1.0.sif"
+  redip: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip_1.0.sif"
+
+genomes_tsv: "/exports/eddie/scratch/s2428892/redip-test/input/genomes_Prim.tsv"
+species_tree: "/exports/eddie/scratch/s2428892/redip-test/input/species_tree_Prim.nwk"
+
+working_dir: "workingDir"
+postdir: "post_genespace"
+
+gff_dir: "/exports/eddie/scratch/s2428892/redip-test/input/gff"
+protein_dir: "/exports/eddie/scratch/s2428892/redip-test/input/protein"
+cds_dir: "/exports/eddie/scratch/s2428892/redip-test/input/cds"
+chr_dict_dir: "/exports/eddie/scratch/s2428892/redip-test/input/chr_dict"
+
+
+start_mode: "full"
+run_rediploidisation: true
+
+annotation:
+  run: false
+
+existing_genespace_wd: null
+existing_orthofinder_dir: null
+
+force_orthofinder: false
+run_external_orthofinder: true
+use_species_tree_for_orthofinder: true
+
+genespace:
+  rawOrthofinderDir: ""
+  blkSize: 5
+  orthofinder_in_blk: true
+
+require_outgroup_og: true
+collapse_tandems: true
