@@ -240,9 +240,9 @@ workflow {
 
         cds_files_ch = Channel.fromPath("${params.cds_dir}/*.cds").collect()
 
-        def orthofinder_species_tree_arg = (
+        def orthofinder_species_tree_ch = (
             params.use_species_tree_for_orthofinder && species_tree_path
-        ) ? species_tree_path : ""
+        ) ? Channel.value(file(species_tree_path, checkIfExists: true)) : Channel.value([])
 
         primary_transcript_script_ch     = Channel.value(file('scripts/primary_transcript.py'))
         apply_chr_dict_script_ch         = Channel.value(file('scripts/apply_chr_dict_to_gff.py'))
