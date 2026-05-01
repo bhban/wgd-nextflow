@@ -121,26 +121,33 @@ process MACSE_ALIGN_OG {
 
     output:
     tuple val(og),
-          path("macse/og_${og}_AA.fasta"),
-          path("macse/og_${og}_NT.fasta"),
-          path("macse/og_${og}.status"),
-          path("macse/og_${og}.log")
+          path("${params.postdir}/macse/og_${og}_AA.fasta"),
+          path("${params.postdir}/macse/og_${og}_NT.fasta"),
+          path("${params.postdir}/macse/og_${og}.status"),
+          path("${params.postdir}/macse/og_${og}.log")
 
     script:
     """
-    mkdir -p macse
+    mkdir -p ${params.postdir}/macse
 
-    rm -f macse/og_${og}.status macse/og_${og}_AA.fasta macse/og_${og}_NT.fasta macse/og_${og}.log
+    rm -f \
+      ${params.postdir}/macse/og_${og}.status \
+      ${params.postdir}/macse/og_${og}_AA.fasta \
+      ${params.postdir}/macse/og_${og}_NT.fasta \
+      ${params.postdir}/macse/og_${og}.log
 
-    echo "STARTED" > macse/og_${og}.status
+    echo "STARTED" > ${params.postdir}/macse/og_${og}.status
 
     on_exit() {
         rc=\$?
-        if [ ! -s macse/og_${og}.status ] || grep -qx 'STARTED' macse/og_${og}.status; then
-            rm -f macse/og_${og}_AA.fasta macse/og_${og}_NT.fasta
-            : > macse/og_${og}_AA.fasta
-            : > macse/og_${og}_NT.fasta
-            echo "FAIL" > macse/og_${og}.status
+        if [ ! -s ${params.postdir}/macse/og_${og}.status ] || grep -qx 'STARTED' ${params.postdir}/macse/og_${og}.status; then
+            rm -f \
+              ${params.postdir}/macse/og_${og}_AA.fasta \
+              ${params.postdir}/macse/og_${og}_NT.fasta
+
+            : > ${params.postdir}/macse/og_${og}_AA.fasta
+            : > ${params.postdir}/macse/og_${og}_NT.fasta
+            echo "FAIL" > ${params.postdir}/macse/og_${og}.status
         fi
         exit \$rc
     }
@@ -149,19 +156,22 @@ process MACSE_ALIGN_OG {
     set +e
     ${params.macse_bin} -prog alignSequences \\
       -seq ${fasta} \\
-      -out_AA macse/og_${og}_AA.fasta \\
-      -out_NT macse/og_${og}_NT.fasta \\
-      > macse/og_${og}.log 2>&1
+      -out_AA ${params.postdir}/macse/og_${og}_AA.fasta \\
+      -out_NT ${params.postdir}/macse/og_${og}_NT.fasta \\
+      > ${params.postdir}/macse/og_${og}.log 2>&1
     rc=\$?
     set -e
 
-    if [ \$rc -eq 0 ] && [ -s macse/og_${og}_AA.fasta ] && [ -s macse/og_${og}_NT.fasta ]; then
-        echo "OK" > macse/og_${og}.status
+    if [ \$rc -eq 0 ] && [ -s ${params.postdir}/macse/og_${og}_AA.fasta ] && [ -s ${params.postdir}/macse/og_${og}_NT.fasta ]; then
+        echo "OK" > ${params.postdir}/macse/og_${og}.status
     else
-        rm -f macse/og_${og}_AA.fasta macse/og_${og}_NT.fasta
-        : > macse/og_${og}_AA.fasta
-        : > macse/og_${og}_NT.fasta
-        echo "FAIL" > macse/og_${og}.status
+        rm -f \
+          ${params.postdir}/macse/og_${og}_AA.fasta \
+          ${params.postdir}/macse/og_${og}_NT.fasta
+
+        : > ${params.postdir}/macse/og_${og}_AA.fasta
+        : > ${params.postdir}/macse/og_${og}_NT.fasta
+        echo "FAIL" > ${params.postdir}/macse/og_${og}.status
     fi
 
     trap - EXIT TERM INT
@@ -208,18 +218,18 @@ process IQTREE_OG {
     tuple val(og), path(aa), path(nt), path(status), path(macse_log)
 
     output:
-    tuple val(og), path("iqtree/og_${og}")
+    tuple val(og), path("${params.postdir}/iqtree/og_${og}")
 
     script:
     """
-    mkdir -p iqtree/og_${og}
+    mkdir -p ${params.postdir}/iqtree/og_${og}
 
-    echo "STARTED" > iqtree/og_${og}/og_${og}.iqtree.status
+    echo "STARTED" > ${params.postdir}/iqtree/og_${og}/og_${og}.iqtree.status
 
     if [ ! -s ${nt} ] || [ "\$(tr -d '\\r\\n' < ${status})" != "OK" ]; then
-        : > iqtree/og_${og}/og_${og}_iqtree.treefile
-        : > iqtree/og_${og}/og_${og}_iqtree.ufboot
-        echo "FAIL" > iqtree/og_${og}/og_${og}.iqtree.status
+        : > ${params.postdir}/iqtree/og_${og}/og_${og}_iqtree.treefile
+        : > ${params.postdir}/iqtree/og_${og}/og_${og}_iqtree.ufboot
+        echo "FAIL" > ${params.postdir}/iqtree/og_${og}/og_${og}.iqtree.status
         exit 0
     fi
 
@@ -231,17 +241,17 @@ process IQTREE_OG {
       -bb 1000 \\
       -wbtl \\
       -redo \\
-      -pre iqtree/og_${og}/og_${og}_iqtree \\
-      > iqtree/og_${og}/og_${og}.log 2>&1
+      -pre ${params.postdir}/iqtree/og_${og}/og_${og}_iqtree \\
+      > ${params.postdir}/iqtree/og_${og}/og_${og}.log 2>&1
     rc=\$?
     set -e
 
-    if [ \$rc -eq 0 ] && [ -s iqtree/og_${og}/og_${og}_iqtree.treefile ] && [ -s iqtree/og_${og}/og_${og}_iqtree.ufboot ]; then
-        echo "OK" > iqtree/og_${og}/og_${og}.iqtree.status
+    if [ \$rc -eq 0 ] && [ -s ${params.postdir}/iqtree/og_${og}/og_${og}_iqtree.treefile ] && [ -s ${params.postdir}/iqtree/og_${og}/og_${og}_iqtree.ufboot ]; then
+        echo "OK" > ${params.postdir}/iqtree/og_${og}/og_${og}.iqtree.status
     else
-        : > iqtree/og_${og}/og_${og}_iqtree.treefile
-        : > iqtree/og_${og}/og_${og}_iqtree.ufboot
-        echo "FAIL" > iqtree/og_${og}/og_${og}.iqtree.status
+        : > ${params.postdir}/iqtree/og_${og}/og_${og}_iqtree.treefile
+        : > ${params.postdir}/iqtree/og_${og}/og_${og}_iqtree.ufboot
+        echo "FAIL" > ${params.postdir}/iqtree/og_${og}/og_${og}.iqtree.status
     fi
     """
 }
