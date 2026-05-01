@@ -371,7 +371,7 @@ workflow {
                     validated_out[1],
                     genome_ids_ch,
                     orthofinder_or_skip_script_ch,
-                    orthofinder_species_tree_arg
+                    orthofinder_species_tree_ch
                 )
                 orthofinder_dir_arg = orthofinder_out[0]
 
