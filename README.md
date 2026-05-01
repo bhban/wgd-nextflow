@@ -92,7 +92,7 @@ Required columns:
 
 Optional column:
 
-- `outgroup`: `yes` or `no`; defaults to `no` if absent
+- `outgroup`: `yes` or `no`; defaults to `no` if absent; can also provide tiered outgroups, specified by integers, with 1 being the most basal outgroup
 - `rediploidisation`: `yes` or `no`
 
 Example:
