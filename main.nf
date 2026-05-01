@@ -367,7 +367,8 @@ workflow {
 
             } else if (use_external_orthofinder) {
                 orthofinder_out = ORTHOFINDER_OR_SKIP(
-                    validated_out,
+                    validated_out[0],
+                    validated_out[1],
                     genome_ids_ch,
                     orthofinder_or_skip_script_ch,
                     orthofinder_species_tree_arg
@@ -379,7 +380,8 @@ workflow {
             }
 
             genespace_ready_out = RUN_GENESPACE(
-                validated_out,
+                validated_out[0],
+                validated_out[1],
                 orthofinder_dir_arg,
                 genomes_tsv_ch,
                 run_genespace_script_ch
@@ -389,11 +391,11 @@ workflow {
         genespace_publish_ch = genespace_ready_out[0]
 
         pass_out = PANGENES_PASS_FILTER(
-            genespace_ready_out,
+            genespace_ready_out[0],
+            genespace_ready_out[1],
             genomes_tsv_ch,
             pangenes_pass_filter_script_ch
         )
-
         post_outputs_ch = post_outputs_ch.mix(pass_out)
 
         pass_tsv_for_og = pass_out[0]
