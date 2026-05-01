@@ -106,37 +106,33 @@ process WRITE_ALERAX_MANIFEST {
 
     script:
     def lines = models.collect { m ->
-        "${m.model_id}\t${m.rec_model}\t${m.model_parametrization}\t${m.gene_tree_samples}"
+        "${m['model_id']}\t${m['rec_model']}\t${m['model_parametrization']}\t${m['gene_tree_samples']}"
     }.join('\n')
 
     """
     mkdir -p ${params.postdir}/alerax
 
-    {
-      echo -e "model_id\trec_model\tmodel_parametrization\tgene_tree_samples"
-      cat <<'EOF'
-${lines}
-EOF
-    } > ${params.postdir}/alerax/model_manifest.tsv
+    printf '%b\\n' 'model_id\\trec_model\\tmodel_parametrization\\tgene_tree_samples' > ${params.postdir}/alerax/model_manifest.tsv
+    printf '%b\\n' '${lines}' >> ${params.postdir}/alerax/model_manifest.tsv
 
     test -s ${params.postdir}/alerax/model_manifest.tsv
     """
 }
 
 process RUN_ALERAX {
-    tag { "alerax_${model.model_id}" }
+    tag { "alerax_${model['model_id']}" }
 
     input:
     tuple path(families), path(species_tree), val(model)
 
     output:
-    tuple val(model.model_id), path("alerax/${model.model_id}")
+    tuple val(model['model_id']), path("alerax/${model['model_id']}")
 
     script:
-    def model_id = model.model_id
-    def rec_model = model.rec_model
-    def model_param = model.model_parametrization
-    def gene_tree_samples = model.gene_tree_samples
+    def model_id = model['model_id']
+    def rec_model = model['rec_model']
+    def model_param = model['model_parametrization']
+    def gene_tree_samples = model['gene_tree_samples']
     def cleanup = params.alerax.cleanup_output ? "true" : "false"
 
     """
@@ -172,19 +168,19 @@ process RUN_ALERAX {
 }
 
 process RUN_ALERAX_RANDOM {
-    tag { "alerax_${model.model_id}" }
+    tag { "alerax_${model['model_id']}" }
 
     input:
     tuple path(families), val(model)
 
     output:
-    tuple val(model.model_id), path("alerax/${model.model_id}")
+    tuple val(model['model_id']), path("alerax/${model['model_id']}")
 
     script:
-    def model_id = model.model_id
-    def rec_model = model.rec_model
-    def model_param = model.model_parametrization
-    def gene_tree_samples = model.gene_tree_samples
+    def model_id = model['model_id']
+    def rec_model = model['rec_model']
+    def model_param = model['model_parametrization']
+    def gene_tree_samples = model['gene_tree_samples']
     def cleanup = params.alerax.cleanup_output ? "true" : "false"
 
     """
@@ -288,7 +284,7 @@ workflow ALERAX_WORKFLOW {
     families_mapping_dir_ch = families_out[1]
     families_publish_ch = families_file_ch.mix(families_mapping_dir_ch)
 
-    manifest_out = WRITE_ALERAX_MANIFEST(models)
+    manifest_out = WRITE_ALERAX_MANIFEST(models.collect())
     manifest_file_ch = manifest_out[0]
 
     def alerax_results_out
