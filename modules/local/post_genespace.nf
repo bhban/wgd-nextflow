@@ -114,6 +114,8 @@ process WRITE_OG_FASTAS {
 
 process MACSE_ALIGN_OG {
     tag { "og_${og}" }
+    array (params.array_size as int)
+    
 
     input:
     tuple val(og), path(fasta)
@@ -144,6 +146,21 @@ process MACSE_ALIGN_OG {
 
     echo "STARTED" > ${params.postdir}/macse/og_${og}.status
 
+    on_exit() {
+        rc=\$?
+        if [ ! -s ${params.postdir}/macse/og_${og}.status ] || grep -qx 'STARTED' ${params.postdir}/macse/og_${og}.status; then
+            rm -f \\
+              ${params.postdir}/macse/og_${og}_AA.fasta \\
+              ${params.postdir}/macse/og_${og}_NT.fasta
+
+            : > ${params.postdir}/macse/og_${og}_AA.fasta
+            : > ${params.postdir}/macse/og_${og}_NT.fasta
+            echo "FAIL" > ${params.postdir}/macse/og_${og}.status
+        fi
+        exit \$rc
+    }
+    trap on_exit EXIT TERM INT
+
     set +e
     /opt/conda/envs/macse/bin/java \\
       -Xmx6g \\
@@ -169,7 +186,7 @@ process MACSE_ALIGN_OG {
         echo "FAIL" > ${params.postdir}/macse/og_${og}.status
     fi
 
-    exit 0
+    trap - EXIT TERM INT
     """
 }
 
