@@ -114,7 +114,6 @@ process WRITE_OG_FASTAS {
 
 process MACSE_ALIGN_OG {
     tag { "og_${og}" }
-    array (params.array_size as int)
 
     input:
     tuple val(og), path(fasta)
@@ -130,31 +129,27 @@ process MACSE_ALIGN_OG {
     """
     mkdir -p ${params.postdir}/macse
 
-    rm -f \
-      ${params.postdir}/macse/og_${og}.status \
-      ${params.postdir}/macse/og_${og}_AA.fasta \
-      ${params.postdir}/macse/og_${og}_NT.fasta \
+    export OMP_NUM_THREADS=${task.cpus}
+    export OPENBLAS_NUM_THREADS=${task.cpus}
+    export MKL_NUM_THREADS=${task.cpus}
+    export VECLIB_MAXIMUM_THREADS=${task.cpus}
+    export NUMEXPR_NUM_THREADS=${task.cpus}
+    export MALLOC_ARENA_MAX=2
+
+    rm -f \\
+      ${params.postdir}/macse/og_${og}.status \\
+      ${params.postdir}/macse/og_${og}_AA.fasta \\
+      ${params.postdir}/macse/og_${og}_NT.fasta \\
       ${params.postdir}/macse/og_${og}.log
 
     echo "STARTED" > ${params.postdir}/macse/og_${og}.status
 
-    on_exit() {
-        rc=\$?
-        if [ ! -s ${params.postdir}/macse/og_${og}.status ] || grep -qx 'STARTED' ${params.postdir}/macse/og_${og}.status; then
-            rm -f \
-              ${params.postdir}/macse/og_${og}_AA.fasta \
-              ${params.postdir}/macse/og_${og}_NT.fasta
-
-            : > ${params.postdir}/macse/og_${og}_AA.fasta
-            : > ${params.postdir}/macse/og_${og}_NT.fasta
-            echo "FAIL" > ${params.postdir}/macse/og_${og}.status
-        fi
-        exit \$rc
-    }
-    trap on_exit EXIT TERM INT
-
     set +e
-    ${params.macse_bin} -prog alignSequences \\
+    /opt/conda/envs/macse/bin/java \\
+      -Xmx6g \\
+      -XX:ActiveProcessorCount=${task.cpus} \\
+      -jar /opt/conda/envs/macse/share/macse-2.07-0/macse_v2.07.jar \\
+      -prog alignSequences \\
       -seq ${fasta} \\
       -out_AA ${params.postdir}/macse/og_${og}_AA.fasta \\
       -out_NT ${params.postdir}/macse/og_${og}_NT.fasta \\
@@ -165,8 +160,8 @@ process MACSE_ALIGN_OG {
     if [ \$rc -eq 0 ] && [ -s ${params.postdir}/macse/og_${og}_AA.fasta ] && [ -s ${params.postdir}/macse/og_${og}_NT.fasta ]; then
         echo "OK" > ${params.postdir}/macse/og_${og}.status
     else
-        rm -f \
-          ${params.postdir}/macse/og_${og}_AA.fasta \
+        rm -f \\
+          ${params.postdir}/macse/og_${og}_AA.fasta \\
           ${params.postdir}/macse/og_${og}_NT.fasta
 
         : > ${params.postdir}/macse/og_${og}_AA.fasta
@@ -174,7 +169,7 @@ process MACSE_ALIGN_OG {
         echo "FAIL" > ${params.postdir}/macse/og_${og}.status
     fi
 
-    trap - EXIT TERM INT
+    exit 0
     """
 }
 
