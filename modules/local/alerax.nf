@@ -8,12 +8,12 @@ process WRITE_ALERAX_MAPPING {
     tuple val(og), path(iqtree_dir), path(nt)
 
     output:
-    tuple val(og),
-          path("og_${og}.mapping.tsv"),
-          path("og_${og}_iqtree.ufboot")
+    path("alerax_mapping_payload")
 
     script:
     """
+    mkdir -p alerax_mapping_payload
+
     treefile="${iqtree_dir}/og_${og}_iqtree.treefile"
     ufboot="${iqtree_dir}/og_${og}_iqtree.ufboot"
     status="${iqtree_dir}/og_${og}.iqtree.status"
@@ -38,7 +38,7 @@ process WRITE_ALERAX_MAPPING {
         exit 1
     fi
 
-    cp "\$ufboot" og_${og}_iqtree.ufboot
+    cp "\$ufboot" alerax_mapping_payload/og_${og}_iqtree.ufboot
 
     awk '
       /^>/{
@@ -52,10 +52,10 @@ process WRITE_ALERAX_MAPPING {
           seen[h]=1
         }
       }
-    ' ${nt} > og_${og}.mapping.tsv
+    ' ${nt} > alerax_mapping_payload/og_${og}.mapping.tsv
 
-    test -s og_${og}.mapping.tsv
-    test -s og_${og}_iqtree.ufboot
+    test -s alerax_mapping_payload/og_${og}.mapping.tsv
+    test -s alerax_mapping_payload/og_${og}_iqtree.ufboot
     """
 }
 
@@ -64,7 +64,7 @@ process WRITE_ALERAX_FAMILIES {
     tag "write_alerax_families"
 
     input:
-    path mapping_results
+    path mapping_payload_dirs
 
     output:
     path("${params.postdir}/alerax/families.txt")
@@ -78,10 +78,10 @@ process WRITE_ALERAX_FAMILIES {
     mkdir -p ${params.postdir}/alerax/gene_to_species_mapping
 
     echo "Staged files in WRITE_ALERAX_FAMILIES:" >&2
-    find . -maxdepth 2 -type f | head -50 >&2
+    find . -maxdepth 4 -type f | head -100 >&2
 
-    find . -name 'og_*.mapping.tsv' -type f -exec cp {} ${params.postdir}/alerax/gene_to_species_mapping/ \\;
-    find . -name 'og_*_iqtree.ufboot' -type f -exec cp {} ${params.postdir}/alerax/gene_trees/ \\;
+    find . -path '*/alerax_mapping_payload/og_*.mapping.tsv' -type f -exec cp {} ${params.postdir}/alerax/gene_to_species_mapping/ \\;
+    find . -path '*/alerax_mapping_payload/og_*_iqtree.ufboot' -type f -exec cp {} ${params.postdir}/alerax/gene_trees/ \\;
 
     {
       echo "[FAMILIES]"
@@ -116,14 +116,14 @@ process WRITE_ALERAX_FAMILIES {
     if [ "\$n_gene_trees" -eq 0 ]; then
         echo "No ufboot files found for AleRax families" >&2
         echo "Contents of work directory:" >&2
-        find . -maxdepth 3 -type f | head -100 >&2
+        find . -maxdepth 5 -type f | head -200 >&2
         exit 1
     fi
 
     if [ "\$n_mappings" -eq 0 ]; then
         echo "No mapping files found for AleRax families" >&2
         echo "Contents of work directory:" >&2
-        find . -maxdepth 3 -type f | head -100 >&2
+        find . -maxdepth 5 -type f | head -200 >&2
         exit 1
     fi
 
@@ -324,11 +324,7 @@ workflow ALERAX_WORKFLOW {
     alerax_map_out = WRITE_ALERAX_MAPPING(iqtree_results)
 
     families_out = WRITE_ALERAX_FAMILIES(
-        alerax_map_out
-            .flatMap { og, mapping, ufboot ->
-                [mapping, ufboot]
-            }
-            .collect()
+        alerax_map_out.collect()
     )
 
     families_file_ch = families_out[0]
@@ -349,7 +345,7 @@ workflow ALERAX_WORKFLOW {
             def fam
             def gene_trees
             def mapping_dir
-    
+
             if (row[0] instanceof List) {
                 fam = row[0][0]
                 gene_trees = row[0][1]
@@ -359,9 +355,10 @@ workflow ALERAX_WORKFLOW {
                 gene_trees = row[1]
                 mapping_dir = row[2]
             }
-    
+
             tuple(fam, gene_trees, mapping_dir)
         }
+
     def alerax_results_out
 
     if (params.use_species_tree_for_alerax) {
