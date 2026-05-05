@@ -26,6 +26,11 @@ process WRITE_ALERAX_MAPPING {
         exit 1
     fi
 
+    if [ ! -s "\$treefile" ]; then
+        echo "Missing IQ-TREE treefile for og_${og}" > alerax/gene_to_species_mapping/og_${og}.mapping.log
+        exit 1
+    fi
+
     if [ ! -s "\$status" ] || [ "\$(tr -d '\\r\\n' < "\$status")" != "OK" ]; then
         echo "IQ-TREE status is not OK for og_${og}" > alerax/gene_to_species_mapping/og_${og}.mapping.log
         exit 1
@@ -57,6 +62,7 @@ process WRITE_ALERAX_MAPPING {
     """
 }
 
+
 process WRITE_ALERAX_FAMILIES {
     tag "write_alerax_families"
 
@@ -65,19 +71,22 @@ process WRITE_ALERAX_FAMILIES {
 
     output:
     path("${params.postdir}/alerax/families.txt")
+    path("${params.postdir}/alerax/gene_trees")
     path("${params.postdir}/alerax/gene_to_species_mapping")
 
     script:
     """
     mkdir -p ${params.postdir}/alerax
+    mkdir -p ${params.postdir}/alerax/gene_trees
     mkdir -p ${params.postdir}/alerax/gene_to_species_mapping
 
     find . -name 'og_*.mapping.tsv' -type f -exec cp {} ${params.postdir}/alerax/gene_to_species_mapping/ \\;
+    find . -name 'og_*_iqtree.ufboot' -type f -exec cp {} ${params.postdir}/alerax/gene_trees/ \\;
 
     {
       echo "[FAMILIES]"
 
-      for uf in \$(find . -name 'og_*_iqtree.ufboot' -type f | sort); do
+      for uf in \$(find ${params.postdir}/alerax/gene_trees -name 'og_*_iqtree.ufboot' -type f | sort); do
         [ -s "\$uf" ] || continue
 
         og=\$(basename "\$uf" _iqtree.ufboot | sed 's/^og_//')
@@ -86,14 +95,36 @@ process WRITE_ALERAX_FAMILIES {
         [ -s "\$mp" ] || continue
 
         echo "- family_\${og}"
-        echo "gene_tree = \$(realpath "\$uf")"
-        echo "mapping = \$(realpath "\$mp")"
+        echo "gene_tree = gene_trees/og_\${og}_iqtree.ufboot"
+        echo "mapping = gene_to_species_mapping/og_\${og}.mapping.tsv"
       done
     } > ${params.postdir}/alerax/families.txt
 
     test -s ${params.postdir}/alerax/families.txt
+    test -d ${params.postdir}/alerax/gene_trees
+    test -d ${params.postdir}/alerax/gene_to_species_mapping
+
+    n_gene_trees=\$(find ${params.postdir}/alerax/gene_trees -name 'og_*_iqtree.ufboot' -type f | wc -l)
+    n_mappings=\$(find ${params.postdir}/alerax/gene_to_species_mapping -name 'og_*.mapping.tsv' -type f | wc -l)
+    n_families=\$(grep -c '^- family_' ${params.postdir}/alerax/families.txt || true)
+
+    if [ "\$n_gene_trees" -eq 0 ]; then
+        echo "No ufboot files found for AleRax families" >&2
+        exit 1
+    fi
+
+    if [ "\$n_mappings" -eq 0 ]; then
+        echo "No mapping files found for AleRax families" >&2
+        exit 1
+    fi
+
+    if [ "\$n_families" -eq 0 ]; then
+        echo "No valid AleRax families written" >&2
+        exit 1
+    fi
     """
 }
+
 
 process WRITE_ALERAX_MANIFEST {
     tag "write_alerax_manifest"
@@ -119,11 +150,12 @@ process WRITE_ALERAX_MANIFEST {
     """
 }
 
+
 process RUN_ALERAX {
     tag { "alerax_${model['model_id']}" }
 
     input:
-    tuple path(families), path(species_tree), val(model)
+    tuple path(families), path(gene_trees), path(mapping_dir), path(species_tree), val(model)
 
     output:
     tuple val(model['model_id']), path("alerax/${model['model_id']}")
@@ -138,6 +170,11 @@ process RUN_ALERAX {
     """
     mkdir -p alerax/${model_id}/output
     mkdir -p mpi_tmp
+
+    test -s ${families}
+    test -d ${gene_trees}
+    test -d ${mapping_dir}
+    test -s ${species_tree}
 
     export TMPDIR="\$PWD/mpi_tmp"
     export TEMP="\$PWD/mpi_tmp"
@@ -167,11 +204,12 @@ process RUN_ALERAX {
     """
 }
 
+
 process RUN_ALERAX_RANDOM {
     tag { "alerax_${model['model_id']}" }
 
     input:
-    tuple path(families), val(model)
+    tuple path(families), path(gene_trees), path(mapping_dir), val(model)
 
     output:
     tuple val(model['model_id']), path("alerax/${model['model_id']}")
@@ -186,6 +224,10 @@ process RUN_ALERAX_RANDOM {
     """
     mkdir -p alerax/${model_id}/output
     mkdir -p mpi_tmp
+
+    test -s ${families}
+    test -d ${gene_trees}
+    test -d ${mapping_dir}
 
     export TMPDIR="\$PWD/mpi_tmp"
     export TEMP="\$PWD/mpi_tmp"
@@ -214,6 +256,7 @@ process RUN_ALERAX_RANDOM {
     touch alerax/${model_id}/alerax.done
     """
 }
+
 
 process ALERAX_REPORT {
     tag "alerax_report"
@@ -260,7 +303,6 @@ process ALERAX_REPORT {
 }
 
 
-
 workflow ALERAX_WORKFLOW {
 
     take:
@@ -281,29 +323,48 @@ workflow ALERAX_WORKFLOW {
     )
 
     families_file_ch = families_out[0]
-    families_mapping_dir_ch = families_out[1]
-    families_publish_ch = families_file_ch.mix(families_mapping_dir_ch)
+    families_gene_trees_dir_ch = families_out[1]
+    families_mapping_dir_ch = families_out[2]
+
+    families_publish_ch = families_file_ch
+        .mix(families_gene_trees_dir_ch)
+        .mix(families_mapping_dir_ch)
 
     manifest_out = WRITE_ALERAX_MANIFEST(models.collect())
     manifest_file_ch = manifest_out[0]
+
+    alerax_files_ch = families_file_ch
+        .combine(families_gene_trees_dir_ch)
+        .combine(families_mapping_dir_ch)
+        .map { fam, gene_trees, mapping_dir ->
+            tuple(fam, gene_trees, mapping_dir)
+        }
 
     def alerax_results_out
 
     if (params.use_species_tree_for_alerax) {
         alerax_in = models
-            .combine(families_file_ch)
+            .combine(alerax_files_ch)
             .combine(species_tree)
-            .map { model, fam, tree ->
-                tuple(fam, tree, model)
+            .map { model, files, tree ->
+                def fam = files[0]
+                def gene_trees = files[1]
+                def mapping_dir = files[2]
+
+                tuple(fam, gene_trees, mapping_dir, tree, model)
             }
 
         alerax_results_out = RUN_ALERAX(alerax_in)
 
     } else {
         alerax_in = models
-            .combine(families_file_ch)
-            .map { model, fam ->
-                tuple(fam, model)
+            .combine(alerax_files_ch)
+            .map { model, files ->
+                def fam = files[0]
+                def gene_trees = files[1]
+                def mapping_dir = files[2]
+
+                tuple(fam, gene_trees, mapping_dir, model)
             }
 
         alerax_results_out = RUN_ALERAX_RANDOM(alerax_in)
