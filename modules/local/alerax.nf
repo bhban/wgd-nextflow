@@ -339,11 +339,26 @@ workflow ALERAX_WORKFLOW {
     manifest_out = WRITE_ALERAX_MANIFEST(models.collect())
     manifest_file_ch = manifest_out[0]
 
-    alerax_files_ch = families_out
-        .map { fam, gene_trees, mapping_dir ->
+    alerax_files_ch = families_file_ch
+        .combine(families_gene_trees_dir_ch)
+        .combine(families_mapping_dir_ch)
+        .map { row ->
+            def fam
+            def gene_trees
+            def mapping_dir
+    
+            if (row[0] instanceof List) {
+                fam = row[0][0]
+                gene_trees = row[0][1]
+                mapping_dir = row[1]
+            } else {
+                fam = row[0]
+                gene_trees = row[1]
+                mapping_dir = row[2]
+            }
+    
             tuple(fam, gene_trees, mapping_dir)
         }
-
     def alerax_results_out
 
     if (params.use_species_tree_for_alerax) {
