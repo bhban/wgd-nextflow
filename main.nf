@@ -119,7 +119,7 @@ def resolveAleraxModels() {
 
 def makeIqtreeDirChannelFromDir(treeDir) {
     Channel
-        .fromPath("${treeDir}/og_*_iqtree.treefile", checkIfExists: true)
+        .fromPath("${treeDir}/og_*/og_*_iqtree.treefile", checkIfExists: true)
         .map { treefile ->
             def m = (treefile.baseName =~ /^og_(.+)_iqtree$/)
             if (!m) {
@@ -127,10 +127,9 @@ def makeIqtreeDirChannelFromDir(treeDir) {
             }
 
             def og = m[0][1]
-            tuple(og, file(treeDir))
+            tuple(og, treefile.parent)
         }
 }
-
 
 // Workflow
 workflow {
