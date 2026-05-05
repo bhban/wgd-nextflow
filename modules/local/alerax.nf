@@ -74,8 +74,17 @@ process WRITE_ALERAX_FAMILIES {
     mkdir -p ${params.postdir}/alerax/gene_to_species_mapping
     mkdir -p ${params.postdir}/alerax/gene_trees
 
-    find . -name 'og_*.mapping.tsv' -type f -exec cp {} ${params.postdir}/alerax/gene_to_species_mapping/ \\;
-    find . -name 'og_*_iqtree.ufboot' -type f -exec cp {} ${params.postdir}/alerax/gene_trees/ \\;
+    find . \\
+      -path "./${params.postdir}/alerax/*" -prune -o \\
+      -name 'og_*.mapping.tsv' \\
+      \\( -type f -o -type l \\) \\
+      -exec cp -L {} ${params.postdir}/alerax/gene_to_species_mapping/ \\;
+
+    find . \\
+      -path "./${params.postdir}/alerax/*" -prune -o \\
+      -name 'og_*_iqtree.ufboot' \\
+      \\( -type f -o -type l \\) \\
+      -exec cp -L {} ${params.postdir}/alerax/gene_trees/ \\;
 
     n_families=0
 
