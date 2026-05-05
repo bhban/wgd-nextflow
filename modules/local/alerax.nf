@@ -8,11 +8,11 @@ process WRITE_ALERAX_MAPPING {
     tuple val(og), path(iqtree_dir), path(nt)
 
     output:
-    path("alerax_mapping_payload_og_${og}")
+    path("alerax_payload_og_${og}")
 
     script:
     """
-    mkdir -p alerax_mapping_payload_og_${og}
+    mkdir -p alerax_payload_og_${og}
 
     treefile="${iqtree_dir}/og_${og}_iqtree.treefile"
     ufboot="${iqtree_dir}/og_${og}_iqtree.ufboot"
@@ -38,7 +38,7 @@ process WRITE_ALERAX_MAPPING {
         exit 1
     fi
 
-    cp "\$ufboot" alerax_mapping_payload_og_${og}/og_${og}_iqtree.ufboot
+    cp "\$ufboot" alerax_payload_og_${og}/og_${og}_iqtree.ufboot
 
     awk '
       /^>/{
@@ -52,10 +52,10 @@ process WRITE_ALERAX_MAPPING {
           seen[h]=1
         }
       }
-    ' ${nt} > alerax_mapping_payload_og_${og}/og_${og}.mapping.tsv
+    ' ${nt} > alerax_payload_og_${og}/og_${og}.mapping.tsv
 
-    test -s alerax_mapping_payload_og_${og}/og_${og}.mapping.tsv
-    test -s alerax_mapping_payload_og_${og}/og_${og}_iqtree.ufboot
+    test -s alerax_payload_og_${og}/og_${og}.mapping.tsv
+    test -s alerax_payload_og_${og}/og_${og}_iqtree.ufboot
     """
 }
 
@@ -67,9 +67,7 @@ process WRITE_ALERAX_FAMILIES {
     path mapping_payload_dirs
 
     output:
-    path("${params.postdir}/alerax/families.txt")
-    path("${params.postdir}/alerax/gene_trees")
-    path("${params.postdir}/alerax/gene_to_species_mapping")
+    path("${params.postdir}/alerax")
 
     script:
     """
@@ -80,8 +78,13 @@ process WRITE_ALERAX_FAMILIES {
     echo "Staged files in WRITE_ALERAX_FAMILIES:" >&2
     find . -maxdepth 4 -type f | head -100 >&2
 
-    find . -path '*/alerax_mapping_payload_og_*/og_*.mapping.tsv' -type f -exec cp {} ${params.postdir}/alerax/gene_to_species_mapping/ \;
-    find . -path '*/alerax_mapping_payload_og_*/og_*_iqtree.ufboot' -type f -exec cp {} ${params.postdir}/alerax/gene_trees/ \;
+    while IFS= read -r f; do
+        cp "\$f" ${params.postdir}/alerax/gene_to_species_mapping/
+    done < <(find . -path './alerax_payload_og_*/og_*.mapping.tsv' -type f | sort)
+
+    while IFS= read -r f; do
+        cp "\$f" ${params.postdir}/alerax/gene_trees/
+    done < <(find . -path './alerax_payload_og_*/og_*_iqtree.ufboot' -type f | sort)
 
     {
       echo "[FAMILIES]"
@@ -95,8 +98,8 @@ process WRITE_ALERAX_FAMILIES {
         [ -s "\$mp" ] || continue
 
         echo "- family_\${og}"
-        echo "gene_tree = gene_trees/og_\${og}_iqtree.ufboot"
-        echo "mapping = gene_to_species_mapping/og_\${og}.mapping.tsv"
+        echo "gene_tree = alerax_input/gene_trees/og_\${og}_iqtree.ufboot"
+        echo "mapping = alerax_input/gene_to_species_mapping/og_\${og}.mapping.tsv"
       done
     } > ${params.postdir}/alerax/families.txt
 
@@ -164,7 +167,7 @@ process RUN_ALERAX {
     tag { "alerax_${model['model_id']}" }
 
     input:
-    tuple path(families), path(gene_trees), path(mapping_dir), path(species_tree), val(model)
+    tuple path(alerax_input_dir, stageAs: "alerax_input"), path(species_tree), val(model)
 
     output:
     tuple val(model['model_id']), path("alerax/${model['model_id']}")
@@ -180,9 +183,9 @@ process RUN_ALERAX {
     mkdir -p alerax/${model_id}/output
     mkdir -p mpi_tmp
 
-    test -s ${families}
-    test -d ${gene_trees}
-    test -d ${mapping_dir}
+    test -s alerax_input/families.txt
+    test -d alerax_input/gene_trees
+    test -d alerax_input/gene_to_species_mapping
     test -s ${species_tree}
 
     export TMPDIR="\$PWD/mpi_tmp"
@@ -191,7 +194,7 @@ process RUN_ALERAX {
     export OMPI_MCA_orte_tmpdir_base="\$PWD/mpi_tmp"
 
     mpiexec --mca orte_tmpdir_base "\$PWD/mpi_tmp" -np ${task.cpus} ${params.alerax_bin} \\
-      -f ${families} \\
+      -f alerax_input/families.txt \\
       -s ${species_tree} \\
       -p alerax/${model_id}/output \\
       -r ${rec_model} \\
@@ -218,7 +221,7 @@ process RUN_ALERAX_RANDOM {
     tag { "alerax_${model['model_id']}" }
 
     input:
-    tuple path(families), path(gene_trees), path(mapping_dir), val(model)
+    tuple path(alerax_input_dir, stageAs: "alerax_input"), val(model)
 
     output:
     tuple val(model['model_id']), path("alerax/${model['model_id']}")
@@ -234,9 +237,9 @@ process RUN_ALERAX_RANDOM {
     mkdir -p alerax/${model_id}/output
     mkdir -p mpi_tmp
 
-    test -s ${families}
-    test -d ${gene_trees}
-    test -d ${mapping_dir}
+    test -s alerax_input/families.txt
+    test -d alerax_input/gene_trees
+    test -d alerax_input/gene_to_species_mapping
 
     export TMPDIR="\$PWD/mpi_tmp"
     export TEMP="\$PWD/mpi_tmp"
@@ -244,7 +247,7 @@ process RUN_ALERAX_RANDOM {
     export OMPI_MCA_orte_tmpdir_base="\$PWD/mpi_tmp"
 
     mpiexec --mca orte_tmpdir_base "\$PWD/mpi_tmp" -np ${task.cpus} ${params.alerax_bin} \\
-      -f ${families} \\
+      -f alerax_input/families.txt \\
       -s random \\
       -p alerax/${model_id}/output \\
       -r ${rec_model} \\
@@ -327,67 +330,33 @@ workflow ALERAX_WORKFLOW {
         alerax_map_out.collect()
     )
 
-    families_file_ch = families_out[0]
-    families_gene_trees_dir_ch = families_out[1]
-    families_mapping_dir_ch = families_out[2]
-
-    families_publish_ch = families_file_ch
-        .mix(families_gene_trees_dir_ch)
-        .mix(families_mapping_dir_ch)
+    families_dir_ch = families_out
+    families_publish_ch = families_dir_ch
 
     manifest_out = WRITE_ALERAX_MANIFEST(models.collect())
     manifest_file_ch = manifest_out[0]
-
-    alerax_files_ch = families_file_ch
-        .combine(families_gene_trees_dir_ch)
-        .combine(families_mapping_dir_ch)
-        .map { row ->
-            def fam
-            def gene_trees
-            def mapping_dir
-
-            if (row[0] instanceof List) {
-                fam = row[0][0]
-                gene_trees = row[0][1]
-                mapping_dir = row[1]
-            } else {
-                fam = row[0]
-                gene_trees = row[1]
-                mapping_dir = row[2]
-            }
-
-            tuple(fam, gene_trees, mapping_dir)
-        }
 
     def alerax_results_out
 
     if (params.use_species_tree_for_alerax) {
         alerax_in = models
-            .combine(alerax_files_ch)
+            .combine(families_dir_ch)
             .combine(species_tree)
             .map { row ->
                 def model = row[0][0]
-                def files = row[0][1]
+                def families_dir = row[0][1]
                 def tree = row[1]
 
-                def fam = files[0]
-                def gene_trees = files[1]
-                def mapping_dir = files[2]
-
-                tuple(fam, gene_trees, mapping_dir, tree, model)
+                tuple(families_dir, tree, model)
             }
 
         alerax_results_out = RUN_ALERAX(alerax_in)
 
     } else {
         alerax_in = models
-            .combine(alerax_files_ch)
-            .map { model, files ->
-                def fam = files[0]
-                def gene_trees = files[1]
-                def mapping_dir = files[2]
-
-                tuple(fam, gene_trees, mapping_dir, model)
+            .combine(families_dir_ch)
+            .map { model, families_dir ->
+                tuple(families_dir, model)
             }
 
         alerax_results_out = RUN_ALERAX_RANDOM(alerax_in)
