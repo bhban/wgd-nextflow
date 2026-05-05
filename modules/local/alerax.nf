@@ -8,11 +8,11 @@ process WRITE_ALERAX_MAPPING {
     tuple val(og), path(iqtree_dir), path(nt)
 
     output:
-    path("alerax_mapping_payload")
+    path("alerax_mapping_payload_og_${og}")
 
     script:
     """
-    mkdir -p alerax_mapping_payload
+    mkdir -p alerax_mapping_payload_og_${og}
 
     treefile="${iqtree_dir}/og_${og}_iqtree.treefile"
     ufboot="${iqtree_dir}/og_${og}_iqtree.ufboot"
@@ -38,7 +38,7 @@ process WRITE_ALERAX_MAPPING {
         exit 1
     fi
 
-    cp "\$ufboot" alerax_mapping_payload/og_${og}_iqtree.ufboot
+    cp "\$ufboot" alerax_mapping_payload_og_${og}/og_${og}_iqtree.ufboot
 
     awk '
       /^>/{
@@ -52,10 +52,10 @@ process WRITE_ALERAX_MAPPING {
           seen[h]=1
         }
       }
-    ' ${nt} > alerax_mapping_payload/og_${og}.mapping.tsv
+    ' ${nt} > alerax_mapping_payload_og_${og}/og_${og}.mapping.tsv
 
-    test -s alerax_mapping_payload/og_${og}.mapping.tsv
-    test -s alerax_mapping_payload/og_${og}_iqtree.ufboot
+    test -s alerax_mapping_payload_og_${og}/og_${og}.mapping.tsv
+    test -s alerax_mapping_payload_og_${og}/og_${og}_iqtree.ufboot
     """
 }
 
@@ -80,8 +80,8 @@ process WRITE_ALERAX_FAMILIES {
     echo "Staged files in WRITE_ALERAX_FAMILIES:" >&2
     find . -maxdepth 4 -type f | head -100 >&2
 
-    find . -path '*/alerax_mapping_payload/og_*.mapping.tsv' -type f -exec cp {} ${params.postdir}/alerax/gene_to_species_mapping/ \\;
-    find . -path '*/alerax_mapping_payload/og_*_iqtree.ufboot' -type f -exec cp {} ${params.postdir}/alerax/gene_trees/ \\;
+    find . -path '*/alerax_mapping_payload_og_*/og_*.mapping.tsv' -type f -exec cp {} ${params.postdir}/alerax/gene_to_species_mapping/ \;
+    find . -path '*/alerax_mapping_payload_og_*/og_*_iqtree.ufboot' -type f -exec cp {} ${params.postdir}/alerax/gene_trees/ \;
 
     {
       echo "[FAMILIES]"
