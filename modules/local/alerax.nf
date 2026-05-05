@@ -9,39 +9,36 @@ process WRITE_ALERAX_MAPPING {
 
     output:
     tuple val(og),
-          path("alerax/gene_to_species_mapping/og_${og}.mapping.tsv"),
-          path("alerax/gene_trees/og_${og}_iqtree.ufboot")
+          path("og_${og}.mapping.tsv"),
+          path("og_${og}_iqtree.ufboot")
 
     script:
     """
-    mkdir -p alerax/gene_to_species_mapping
-    mkdir -p alerax/gene_trees
-
     treefile="${iqtree_dir}/og_${og}_iqtree.treefile"
     ufboot="${iqtree_dir}/og_${og}_iqtree.ufboot"
     status="${iqtree_dir}/og_${og}.iqtree.status"
 
     if [ ! -s ${nt} ]; then
-        echo "Missing NT fasta for og_${og}" > alerax/gene_to_species_mapping/og_${og}.mapping.log
+        echo "Missing NT fasta for og_${og}" >&2
         exit 1
     fi
 
     if [ ! -s "\$treefile" ]; then
-        echo "Missing IQ-TREE treefile for og_${og}" > alerax/gene_to_species_mapping/og_${og}.mapping.log
+        echo "Missing IQ-TREE treefile for og_${og}: \$treefile" >&2
         exit 1
     fi
 
     if [ ! -s "\$status" ] || [ "\$(tr -d '\\r\\n' < "\$status")" != "OK" ]; then
-        echo "IQ-TREE status is not OK for og_${og}" > alerax/gene_to_species_mapping/og_${og}.mapping.log
+        echo "IQ-TREE status is not OK for og_${og}: \$status" >&2
         exit 1
     fi
 
     if [ ! -s "\$ufboot" ]; then
-        echo "Missing ufboot for og_${og}" > alerax/gene_to_species_mapping/og_${og}.mapping.log
+        echo "Missing ufboot for og_${og}: \$ufboot" >&2
         exit 1
     fi
 
-    cp "\$ufboot" alerax/gene_trees/og_${og}_iqtree.ufboot
+    cp "\$ufboot" og_${og}_iqtree.ufboot
 
     awk '
       /^>/{
@@ -55,10 +52,10 @@ process WRITE_ALERAX_MAPPING {
           seen[h]=1
         }
       }
-    ' ${nt} > alerax/gene_to_species_mapping/og_${og}.mapping.tsv
+    ' ${nt} > og_${og}.mapping.tsv
 
-    test -s alerax/gene_to_species_mapping/og_${og}.mapping.tsv
-    test -s alerax/gene_trees/og_${og}_iqtree.ufboot
+    test -s og_${og}.mapping.tsv
+    test -s og_${og}_iqtree.ufboot
     """
 }
 
@@ -67,7 +64,7 @@ process WRITE_ALERAX_FAMILIES {
     tag "write_alerax_families"
 
     input:
-    path mapping_results
+    path mapping_results, stageAs: "alerax_inputs/*"
 
     output:
     path("${params.postdir}/alerax/families.txt")
@@ -80,8 +77,8 @@ process WRITE_ALERAX_FAMILIES {
     mkdir -p ${params.postdir}/alerax/gene_trees
     mkdir -p ${params.postdir}/alerax/gene_to_species_mapping
 
-    find . -name 'og_*.mapping.tsv' -type f -exec cp {} ${params.postdir}/alerax/gene_to_species_mapping/ \\;
-    find . -name 'og_*_iqtree.ufboot' -type f -exec cp {} ${params.postdir}/alerax/gene_trees/ \\;
+    find alerax_inputs -name 'og_*.mapping.tsv' -type f -exec cp {} ${params.postdir}/alerax/gene_to_species_mapping/ \\;
+    find alerax_inputs -name 'og_*_iqtree.ufboot' -type f -exec cp {} ${params.postdir}/alerax/gene_trees/ \\;
 
     {
       echo "[FAMILIES]"
@@ -108,13 +105,22 @@ process WRITE_ALERAX_FAMILIES {
     n_mappings=\$(find ${params.postdir}/alerax/gene_to_species_mapping -name 'og_*.mapping.tsv' -type f | wc -l)
     n_families=\$(grep -c '^- family_' ${params.postdir}/alerax/families.txt || true)
 
+    echo "AleRax family input summary:" >&2
+    echo "  ufboot files: \$n_gene_trees" >&2
+    echo "  mapping files: \$n_mappings" >&2
+    echo "  families: \$n_families" >&2
+
     if [ "\$n_gene_trees" -eq 0 ]; then
         echo "No ufboot files found for AleRax families" >&2
+        echo "Contents of alerax_inputs:" >&2
+        find alerax_inputs -maxdepth 2 -type f | head -50 >&2
         exit 1
     fi
 
     if [ "\$n_mappings" -eq 0 ]; then
         echo "No mapping files found for AleRax families" >&2
+        echo "Contents of alerax_inputs:" >&2
+        find alerax_inputs -maxdepth 2 -type f | head -50 >&2
         exit 1
     fi
 
@@ -333,9 +339,7 @@ workflow ALERAX_WORKFLOW {
     manifest_out = WRITE_ALERAX_MANIFEST(models.collect())
     manifest_file_ch = manifest_out[0]
 
-    alerax_files_ch = families_file_ch
-        .combine(families_gene_trees_dir_ch)
-        .combine(families_mapping_dir_ch)
+    alerax_files_ch = families_out
         .map { fam, gene_trees, mapping_dir ->
             tuple(fam, gene_trees, mapping_dir)
         }
@@ -346,7 +350,11 @@ workflow ALERAX_WORKFLOW {
         alerax_in = models
             .combine(alerax_files_ch)
             .combine(species_tree)
-            .map { model, files, tree ->
+            .map { row ->
+                def model = row[0][0]
+                def files = row[0][1]
+                def tree = row[1]
+
                 def fam = files[0]
                 def gene_trees = files[1]
                 def mapping_dir = files[2]
