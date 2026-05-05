@@ -155,22 +155,7 @@ workflow {
     genespace_publish_ch = Channel.empty()
     post_outputs_ch = Channel.empty()
 
-    genomes_rows = readGenomesTable(params.genomes_tsv)
-
     def species_tree_path = params.species_tree?.toString()?.trim()
-
-    if (params.use_species_tree_for_orthofinder && !species_tree_path) {
-        error "--species_tree must be provided when --use_species_tree_for_orthofinder is true"
-    }
-
-    if (params.use_species_tree_for_alerax && !species_tree_path) {
-        error "--species_tree must be provided when --use_species_tree_for_alerax is true"
-    }
-
-    genomes_tsv_ch = Channel.value(file(params.genomes_tsv))
-
-    def alerax_models = resolveAleraxModels()
-    def alerax_models_ch = Channel.fromList(alerax_models)
 
     def redipDefaults = [
         positions_source: 'bed',
@@ -223,6 +208,9 @@ workflow {
             error "--alerax.nt_alignments_dir must be provided when --start_mode alerax"
         }
     
+        def alerax_models = resolveAleraxModels()
+        def alerax_models_ch = Channel.fromList(alerax_models)
+    
         def species_tree_ch = params.use_species_tree_for_alerax
             ? Channel.value(file(species_tree_path, checkIfExists: true))
             : Channel.empty()
@@ -252,6 +240,10 @@ workflow {
      */
 
     } else if (params.start_mode == 'redip') {
+    
+        genomes_rows = readGenomesTable(params.genomes_tsv)
+        genomes_tsv_ch = Channel.value(file(params.genomes_tsv, checkIfExists: true))
+    
         if (!params.run_rediploidisation) {
             error "--run_rediploidisation must be true when --start_mode redip"
         }
@@ -306,12 +298,23 @@ workflow {
         post_outputs_ch = post_outputs_ch.mix(redip_out.report)
 
     } else {
-
+    
         /*
          * =========================
          * FULL / PARSED / GENESPACE PIPELINE
          * =========================
          */
+    
+        genomes_rows = readGenomesTable(params.genomes_tsv)
+        genomes_tsv_ch = Channel.value(file(params.genomes_tsv, checkIfExists: true))
+    
+        if (params.use_species_tree_for_orthofinder && !species_tree_path) {
+            error "--species_tree must be provided when --use_species_tree_for_orthofinder is true"
+        }
+    
+        if (params.use_species_tree_for_alerax && params.run_alerax && !species_tree_path) {
+            error "--species_tree must be provided when --run_alerax is true and --use_species_tree_for_alerax is true"
+        }
 
         genomes_ch = Channel
             .fromList(genomes_rows)
@@ -576,6 +579,9 @@ workflow {
             }
         
         if (params.run_alerax) {
+            def alerax_models = resolveAleraxModels()
+            def alerax_models_ch = Channel.fromList(alerax_models)
+        
             def species_tree_ch = params.use_species_tree_for_alerax
                 ? Channel.value(file(species_tree_path))
                 : Channel.empty()
