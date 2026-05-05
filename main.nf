@@ -131,6 +131,34 @@ def makeIqtreeDirChannelFromDir(treeDir) {
         }
 }
 
+def redipDefaults = [
+    positions_source: 'bed',
+    positions: '',
+    position_format: 'auto',
+
+    position_has_header: true,
+    position_key_column: 'id',
+    position_chr_column: 'chr',
+    position_start_column: 'start',
+    position_end_column: 'end',
+    position_species_column: 'genome',
+
+    gene_trees_dir: '',
+    genespace_wd: '',
+
+    species_tree_format: 1,
+    gene_tree_format: 1,
+    tip_separator: '|',
+    label_format: 'species_chr_gene',
+    copy_mode: 'target_exactly_n',
+    required_copies: 2,
+    min_tips: 1,
+    position_key_type: 'gene',
+    cleanup_tmp: true
+]
+
+def redipParams = redipDefaults + (params.rediploidisation ?: [:])
+
 
 // Workflow
 workflow {
@@ -168,33 +196,34 @@ workflow {
             error "--species_tree must be provided when --start_mode redip"
         }
 
-        if (!params.rediploidisation?.gene_trees_dir?.toString()?.trim()) {
+        if (!redipParams.gene_trees_dir?.toString()?.trim()) {
             error "--rediploidisation.gene_trees_dir must be provided when --start_mode redip"
         }
-
+        
         if (
-            params.rediploidisation?.positions_source != 'positions' &&
-            !params.rediploidisation?.genespace_wd?.toString()?.trim()
+            redipParams.positions_source != 'positions' &&
+            !redipParams.genespace_wd?.toString()?.trim()
         ) {
             error "--rediploidisation.genespace_wd must be provided unless positions_source = positions"
         }
-
+        
         if (
-            params.rediploidisation?.positions_source == 'positions' &&
-            !params.rediploidisation?.positions?.toString()?.trim()
+            redipParams.positions_source == 'positions' &&
+            !redipParams.positions?.toString()?.trim()
         ) {
             error "--rediploidisation.positions must be provided when positions_source = positions"
         }
-
-        def redip_genespace_wd_ch = params.rediploidisation?.genespace_wd?.toString()?.trim()
-            ? Channel.value(file(params.rediploidisation.genespace_wd))
+        
+        def redip_genespace_wd_ch = redipParams.genespace_wd?.toString()?.trim()
+            ? Channel.value(file(redipParams.genespace_wd))
             : Channel.value(file('.'))
-
+        
         def redip_out = REDIPLOIDISATION(
             genomes_tsv_ch,
             Channel.value(file(species_tree_path)),
-            makeIqtreeDirChannelFromDir(params.rediploidisation.gene_trees_dir),
-            redip_genespace_wd_ch
+            makeIqtreeDirChannelFromDir(redipParams.gene_trees_dir),
+            redip_genespace_wd_ch,
+            redipParams
         )
 
         post_outputs_ch = post_outputs_ch.mix(
@@ -509,21 +538,29 @@ workflow {
                 error "--species_tree must be provided when --run_rediploidisation is true"
             }
         
-            def redip_gene_trees_dir = params.rediploidisation?.gene_trees_dir?.toString()?.trim()
+            if (
+                redipParams.positions_source == 'positions' &&
+                !redipParams.positions?.toString()?.trim()
+            ) {
+                error "--rediploidisation.positions must be provided when positions_source = positions"
+            }
+        
+            def redip_gene_trees_dir = redipParams.gene_trees_dir?.toString()?.trim()
         
             def redip_iqtree_ch = redip_gene_trees_dir
                 ? makeIqtreeDirChannelFromDir(redip_gene_trees_dir)
                 : iqtree_for_redip_ch
         
-            def redip_genespace_wd_ch = params.rediploidisation?.genespace_wd?.toString()?.trim()
-                ? Channel.value(file(params.rediploidisation.genespace_wd))
+            def redip_genespace_wd_ch = redipParams.genespace_wd?.toString()?.trim()
+                ? Channel.value(file(redipParams.genespace_wd))
                 : genespace_ready_out[0]
         
             def redip_out = REDIPLOIDISATION(
                 genomes_tsv_ch,
                 Channel.value(file(species_tree_path)),
                 redip_iqtree_ch,
-                redip_genespace_wd_ch
+                redip_genespace_wd_ch,
+                redipParams
             )
         
             post_outputs_ch = post_outputs_ch.mix(
