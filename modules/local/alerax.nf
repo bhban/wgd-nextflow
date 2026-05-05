@@ -64,7 +64,7 @@ process WRITE_ALERAX_FAMILIES {
     tag "write_alerax_families"
 
     input:
-    path mapping_results, stageAs: "alerax_inputs/*"
+    path mapping_results
 
     output:
     path("${params.postdir}/alerax/families.txt")
@@ -77,8 +77,11 @@ process WRITE_ALERAX_FAMILIES {
     mkdir -p ${params.postdir}/alerax/gene_trees
     mkdir -p ${params.postdir}/alerax/gene_to_species_mapping
 
-    find alerax_inputs -name 'og_*.mapping.tsv' -type f -exec cp {} ${params.postdir}/alerax/gene_to_species_mapping/ \\;
-    find alerax_inputs -name 'og_*_iqtree.ufboot' -type f -exec cp {} ${params.postdir}/alerax/gene_trees/ \\;
+    echo "Staged files in WRITE_ALERAX_FAMILIES:" >&2
+    find . -maxdepth 2 -type f | head -50 >&2
+
+    find . -name 'og_*.mapping.tsv' -type f -exec cp {} ${params.postdir}/alerax/gene_to_species_mapping/ \\;
+    find . -name 'og_*_iqtree.ufboot' -type f -exec cp {} ${params.postdir}/alerax/gene_trees/ \\;
 
     {
       echo "[FAMILIES]"
@@ -112,15 +115,15 @@ process WRITE_ALERAX_FAMILIES {
 
     if [ "\$n_gene_trees" -eq 0 ]; then
         echo "No ufboot files found for AleRax families" >&2
-        echo "Contents of alerax_inputs:" >&2
-        find alerax_inputs -maxdepth 2 -type f | head -50 >&2
+        echo "Contents of work directory:" >&2
+        find . -maxdepth 3 -type f | head -100 >&2
         exit 1
     fi
 
     if [ "\$n_mappings" -eq 0 ]; then
         echo "No mapping files found for AleRax families" >&2
-        echo "Contents of alerax_inputs:" >&2
-        find alerax_inputs -maxdepth 2 -type f | head -50 >&2
+        echo "Contents of work directory:" >&2
+        find . -maxdepth 3 -type f | head -100 >&2
         exit 1
     fi
 
