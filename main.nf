@@ -251,7 +251,7 @@ workflow {
      * =========================
      */
 
-    if (params.start_mode == 'redip') {
+    } else if (params.start_mode == 'redip') {
         if (!params.run_rediploidisation) {
             error "--run_rediploidisation must be true when --start_mode redip"
         }
