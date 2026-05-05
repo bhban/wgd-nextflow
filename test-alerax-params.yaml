@@ -23,9 +23,9 @@ alerax:
     - model_id: "DL_global"
       rec_model: "UndatedDL"
       model_parametrization: "GLOBAL"
-      gene_tree_samples: 100
+      gene_tree_samples: 10
 
     - model_id: "DL_perSpecies"
       rec_model: "UndatedDL"
       model_parametrization: "PER-SPECIES"
-      gene_tree_samples: 100
+      gene_tree_samples: 10
