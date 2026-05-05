@@ -131,34 +131,6 @@ def makeIqtreeDirChannelFromDir(treeDir) {
         }
 }
 
-def redipDefaults = [
-    positions_source: 'bed',
-    positions: '',
-    position_format: 'auto',
-
-    position_has_header: true,
-    position_key_column: 'id',
-    position_chr_column: 'chr',
-    position_start_column: 'start',
-    position_end_column: 'end',
-    position_species_column: 'genome',
-
-    gene_trees_dir: '',
-    genespace_wd: '',
-
-    species_tree_format: 1,
-    gene_tree_format: 1,
-    tip_separator: '|',
-    label_format: 'species_chr_gene',
-    copy_mode: 'target_exactly_n',
-    required_copies: 2,
-    min_tips: 1,
-    position_key_type: 'gene',
-    cleanup_tmp: true
-]
-
-def redipParams = redipDefaults + (params.rediploidisation ?: [:])
-
 
 // Workflow
 workflow {
@@ -180,6 +152,35 @@ workflow {
     }
 
     genomes_tsv_ch = Channel.value(file(params.genomes_tsv))
+
+    def redipDefaults = [
+        positions_source: 'bed',
+        positions: '',
+        position_format: 'auto',
+
+        position_has_header: true,
+        position_key_column: 'id',
+        position_chr_column: 'chr',
+        position_start_column: 'start',
+        position_end_column: 'end',
+        position_species_column: 'genome',
+
+        gene_trees_dir: '',
+        genespace_wd: '',
+
+        species_tree_format: 1,
+        gene_tree_format: 1,
+        tip_separator: '|',
+        label_format: 'species_chr_gene',
+        copy_mode: 'target_exactly_n',
+        required_copies: 2,
+        min_tips: 1,
+        position_key_type: 'gene',
+        cleanup_tmp: true
+    ]
+
+    def redipParams = redipDefaults + (params.rediploidisation ?: [:])
+
 
     /*
      * =========================
