@@ -131,6 +131,23 @@ def makeIqtreeDirChannelFromDir(treeDir) {
         }
 }
 
+def makeAleraxInputChannelFromDirs(treeDir, ntDir) {
+    Channel
+        .fromPath("${treeDir}/og_*/og_*_iqtree.treefile", checkIfExists: true)
+        .map { treefile ->
+            def m = (treefile.baseName =~ /^og_(.+)_iqtree$/)
+            if (!m) {
+                throw new IllegalArgumentException("Could not parse OG from IQ-TREE filename: ${treefile}")
+            }
+
+            def og = m[0][1]
+            def iqtree_dir = treefile.parent
+            def nt = file("${ntDir}/og_${og}_NT.fasta", checkIfExists: true)
+
+            tuple(og, iqtree_dir, nt)
+        }
+}
+
 // Workflow
 workflow {
     main:
@@ -151,6 +168,9 @@ workflow {
     }
 
     genomes_tsv_ch = Channel.value(file(params.genomes_tsv))
+
+    def alerax_models = resolveAleraxModels()
+    def alerax_models_ch = Channel.fromList(alerax_models)
 
     def redipDefaults = [
         positions_source: 'bed',
@@ -180,6 +200,50 @@ workflow {
 
     def redipParams = redipDefaults + (params.rediploidisation ?: [:])
 
+    /*
+     * =========================
+     * ALERAX-ONLY MODE
+     * =========================
+     */
+    
+    if (params.start_mode == 'alerax') {
+        if (!params.run_alerax) {
+            error "--run_alerax must be true when --start_mode alerax"
+        }
+    
+        if (params.use_species_tree_for_alerax && !species_tree_path) {
+            error "--species_tree must be provided when --start_mode alerax and --use_species_tree_for_alerax is true"
+        }
+    
+        if (!params.alerax?.gene_trees_dir?.toString()?.trim()) {
+            error "--alerax.gene_trees_dir must be provided when --start_mode alerax"
+        }
+    
+        if (!params.alerax?.nt_alignments_dir?.toString()?.trim()) {
+            error "--alerax.nt_alignments_dir must be provided when --start_mode alerax"
+        }
+    
+        def species_tree_ch = params.use_species_tree_for_alerax
+            ? Channel.value(file(species_tree_path, checkIfExists: true))
+            : Channel.empty()
+    
+        def alerax_input_ch = makeAleraxInputChannelFromDirs(
+            params.alerax.gene_trees_dir,
+            params.alerax.nt_alignments_dir
+        )
+    
+        def alerax_out = ALERAX_WORKFLOW(
+            alerax_input_ch,
+            species_tree_ch,
+            alerax_models_ch
+        )
+    
+        post_outputs_ch = post_outputs_ch.mix(alerax_out.families)
+        post_outputs_ch = post_outputs_ch.mix(alerax_out.manifest)
+        post_outputs_ch = post_outputs_ch.mix(
+            alerax_out.results.map { model_id, dir -> dir }.collect()
+        )
+        post_outputs_ch = post_outputs_ch.mix(alerax_out.report)
 
     /*
      * =========================
@@ -286,9 +350,6 @@ workflow {
 
         genome_ids_ch = Channel.value(genomes_rows.collect { it.genome })
 
-        def alerax_models = resolveAleraxModels()
-        def alerax_models_ch = Channel.fromList(alerax_models)
-
         def validated_out = null
         def genespace_ready_out
 
@@ -379,7 +440,7 @@ workflow {
             genespace_ready_out = VALIDATE_GENESPACE_RESULTS(existing_wd_ch)
 
         } else {
-            error "Unsupported start_mode: ${params.start_mode}. Use 'full', 'parsed', 'genespace', or 'redip'."
+            error "Unsupported start_mode: ${params.start_mode}. Use 'full', 'parsed', 'genespace', 'alerax', or 'redip'."
         }
 
         if (params.start_mode != 'genespace') {
