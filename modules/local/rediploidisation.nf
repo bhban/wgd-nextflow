@@ -41,6 +41,7 @@ process ROOT_GENE_TREE {
     path genomes_tsv
     path root_script
     path redip_utils
+    val redip_params
 
     output:
     tuple val(og),
@@ -58,8 +59,8 @@ process ROOT_GENE_TREE {
         --genomes-tsv ${genomes_tsv} \\
         --output-tree rediploidisation/rooted_trees/og_${og}.rooted.treefile \\
         --summary-tsv rediploidisation/rooting_summaries/og_${og}.rooting_summary.tsv \\
-        --tip-separator '${params.rediploidisation.tip_separator}' \\
-        --tree-format ${params.rediploidisation.gene_tree_format}
+        --tip-separator '${redip_params.tip_separator}' \\
+        --tree-format ${redip_params.gene_tree_format}
     """
 }
 
@@ -72,6 +73,7 @@ process WRITE_BRANCH_DEFS {
     path genomes_tsv
     path branch_script
     path redip_utils
+    val redip_params
 
     output:
     path "rediploidisation/branch_definitions"
@@ -84,7 +86,7 @@ process WRITE_BRANCH_DEFS {
         --tree ${species_tree} \\
         --genomes-tsv ${genomes_tsv} \\
         --output-dir rediploidisation/branch_definitions \\
-        --tree-format ${params.rediploidisation.species_tree_format}
+        --tree-format ${redip_params.species_tree_format}
     """
 }
 
@@ -98,6 +100,7 @@ process CLASSIFY_REDIP_EVENTS {
     path genomes_tsv
     path classify_script
     path redip_utils
+    val redip_params
 
     output:
     tuple val(species), path("rediploidisation/classifications/${species}.redip_classification.tsv")
@@ -120,11 +123,11 @@ process CLASSIFY_REDIP_EVENTS {
         --treefile ${species}.rooted_gene_trees.nwk \\
         --genomes-tsv ${genomes_tsv} \\
         --output rediploidisation/classifications/${species}.redip_classification.tsv \\
-        --tip-separator '${params.rediploidisation.tip_separator}' \\
-        --label-format ${params.rediploidisation.label_format} \\
-        --copy-mode ${params.rediploidisation.copy_mode} \\
-        --required-copies ${params.rediploidisation.required_copies} \\
-        --min-tips ${params.rediploidisation.min_tips}
+        --tip-separator '${redip_params.tip_separator}' \\
+        --label-format ${redip_params.label_format} \\
+        --copy-mode ${redip_params.copy_mode} \\
+        --required-copies ${redip_params.required_copies} \\
+        --min-tips ${redip_params.min_tips}
     """
 }
 
@@ -139,35 +142,36 @@ process MAKE_REDIP_LINKS {
     path genespace_wd
     path links_script
     path redip_utils
+    val redip_params
 
     output:
     tuple val(species), path("rediploidisation/circos_links/${species}.circos_links.tsv")
 
     script:
-    def source = params.rediploidisation.positions_source ?: 'bed'
+    def source = redip_params.positions_source ?: 'bed'
 
     def position_arg
     if (source == 'pangenes') {
         position_arg = "--pangenes-dir ${genespace_wd}/pangenes"
     } else if (source == 'positions') {
-        if (!params.rediploidisation.positions?.toString()?.trim()) {
+        if (!redip_params.positions?.toString()?.trim()) {
             throw new IllegalArgumentException(
-                "params.rediploidisation.positions must be provided when positions_source = 'positions'"
+                "rediploidisation.positions must be provided when positions_source = 'positions'"
             )
         }
 
-        def species_col_arg = params.rediploidisation.position_species_column?.toString()?.trim()
-            ? "--position-species-column ${params.rediploidisation.position_species_column}"
+        def species_col_arg = redip_params.position_species_column?.toString()?.trim()
+            ? "--position-species-column ${redip_params.position_species_column}"
             : ""
 
         position_arg = """
-            --positions ${params.rediploidisation.positions}
-            --position-format ${params.rediploidisation.position_format}
-            ${params.rediploidisation.position_has_header ? '--position-has-header' : '--no-position-has-header'}
-            --position-key-column ${params.rediploidisation.position_key_column}
-            --position-chr-column ${params.rediploidisation.position_chr_column}
-            --position-start-column ${params.rediploidisation.position_start_column}
-            --position-end-column ${params.rediploidisation.position_end_column}
+            --positions ${redip_params.positions}
+            --position-format ${redip_params.position_format}
+            ${redip_params.position_has_header ? '--position-has-header' : '--no-position-has-header'}
+            --position-key-column ${redip_params.position_key_column}
+            --position-chr-column ${redip_params.position_chr_column}
+            --position-start-column ${redip_params.position_start_column}
+            --position-end-column ${redip_params.position_end_column}
             ${species_col_arg}
         """
     } else {
@@ -183,9 +187,9 @@ process MAKE_REDIP_LINKS {
         ${position_arg} \\
         --branch-definitions ${branch_definitions}/${species}.branch_definitions.tsv \\
         --output rediploidisation/circos_links/${species}.circos_links.tsv \\
-        --tip-separator '${params.rediploidisation.tip_separator}' \\
-        --label-format ${params.rediploidisation.label_format} \\
-        --position-key-type ${params.rediploidisation.position_key_type} \\
+        --tip-separator '${redip_params.tip_separator}' \\
+        --label-format ${redip_params.label_format} \\
+        --position-key-type ${redip_params.position_key_type} \\
         --write-header \\
         --include-metadata \\
         --on-exists overwrite \\
@@ -303,6 +307,7 @@ workflow REDIPLOIDISATION {
     species_tree
     iqtree_results
     genespace_wd
+    redip_params
 
     main:
     redip_utils_ch = Channel.value(file('scripts/rediploidisation/redip_utils.py'))
@@ -327,7 +332,8 @@ workflow REDIPLOIDISATION {
         iqtree_tree_ch,
         genomes_tsv,
         root_script_ch,
-        redip_utils_ch
+        redip_utils_ch,
+        redip_params
     )
 
     rooted_trees_ch = ROOT_GENE_TREE.out
@@ -342,7 +348,8 @@ workflow REDIPLOIDISATION {
         species_tree,
         genomes_tsv,
         branch_script_ch,
-        redip_utils_ch
+        redip_utils_ch,
+        redip_params
     )
 
     classify_input_ch = redip_species_ch
@@ -360,7 +367,8 @@ workflow REDIPLOIDISATION {
         classify_input_ch,
         genomes_tsv,
         classify_script_ch,
-        redip_utils_ch
+        redip_utils_ch,
+        redip_params
     )
 
     MAKE_REDIP_LINKS(
@@ -368,7 +376,8 @@ workflow REDIPLOIDISATION {
         WRITE_BRANCH_DEFS.out,
         genespace_wd,
         links_script_ch,
-        redip_utils_ch
+        redip_utils_ch,
+        redip_params
     )
 
     chr_beds_ch = redip_species_ch.map { species ->
@@ -377,10 +386,10 @@ workflow REDIPLOIDISATION {
             file("${params.chr_dict_dir}/${species}_chr_lengths.bed", checkIfExists: true)
         )
     }
-    
+
     circos_links_with_chr_beds_ch = MAKE_REDIP_LINKS.out
         .join(chr_beds_ch)
-    
+
     PREP_REDIP_CIRCOS(
         circos_links_with_chr_beds_ch,
         prep_script_ch,
