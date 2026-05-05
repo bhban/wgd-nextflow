@@ -199,7 +199,7 @@ process PREP_REDIP_CIRCOS {
     array (params.array_size as int)
 
     input:
-    tuple val(species), path(circos_links)
+    tuple val(species), path(circos_links), path(chr_bed)
     path prep_script
     path redip_utils
 
@@ -210,10 +210,13 @@ process PREP_REDIP_CIRCOS {
     """
     mkdir -p rediploidisation/circos_inputs
 
+    test -s ${circos_links}
+    test -s ${chr_bed}
+
     python ${prep_script} \\
         --species ${species} \\
         --circos-links ${circos_links} \\
-        --chr-bed ${params.chr_dict_dir}/${species}_chr_lengths.bed \\
+        --chr-bed ${chr_bed} \\
         --output-dir rediploidisation/circos_inputs/${species}
     """
 }
@@ -368,8 +371,18 @@ workflow REDIPLOIDISATION {
         redip_utils_ch
     )
 
+    chr_beds_ch = redip_species_ch.map { species ->
+        tuple(
+            species,
+            file("${params.chr_dict_dir}/${species}_chr_lengths.bed", checkIfExists: true)
+        )
+    }
+    
+    circos_links_with_chr_beds_ch = MAKE_REDIP_LINKS.out
+        .join(chr_beds_ch)
+    
     PREP_REDIP_CIRCOS(
-        MAKE_REDIP_LINKS.out,
+        circos_links_with_chr_beds_ch,
         prep_script_ch,
         redip_utils_ch
     )
