@@ -66,18 +66,32 @@ process WRITE_ALERAX_FAMILIES {
     output:
     path("${params.postdir}/alerax/families.txt")
     path("${params.postdir}/alerax/gene_to_species_mapping")
+    path("${params.postdir}/alerax/gene_trees")
 
     script:
     """
     mkdir -p ${params.postdir}/alerax
     mkdir -p ${params.postdir}/alerax/gene_to_species_mapping
+    mkdir -p ${params.postdir}/alerax/gene_trees
 
-    find . -name 'og_*.mapping.tsv' -type f -exec cp {} ${params.postdir}/alerax/gene_to_species_mapping/ \\;
+    find . \\
+      -path "./${params.postdir}/alerax/*" -prune -o \\
+      -name 'og_*.mapping.tsv' \\
+      \\( -type f -o -type l \\) \\
+      -exec cp -L {} ${params.postdir}/alerax/gene_to_species_mapping/ \\;
+
+    find . \\
+      -path "./${params.postdir}/alerax/*" -prune -o \\
+      -name 'og_*_iqtree.ufboot' \\
+      \\( -type f -o -type l \\) \\
+      -exec cp -L {} ${params.postdir}/alerax/gene_trees/ \\;
+
+    n_families=0
 
     {
       echo "[FAMILIES]"
 
-      for uf in \$(find . -name 'og_*_iqtree.ufboot' -type f | sort); do
+      for uf in \$(find ${params.postdir}/alerax/gene_trees -name 'og_*_iqtree.ufboot' -type f | sort); do
         [ -s "\$uf" ] || continue
 
         og=\$(basename "\$uf" _iqtree.ufboot | sed 's/^og_//')
@@ -88,10 +102,13 @@ process WRITE_ALERAX_FAMILIES {
         echo "- family_\${og}"
         echo "gene_tree = \$(realpath "\$uf")"
         echo "mapping = \$(realpath "\$mp")"
+
+        n_families=\$((n_families + 1))
       done
     } > ${params.postdir}/alerax/families.txt
 
     test -s ${params.postdir}/alerax/families.txt
+    test "\$n_families" -gt 0
     """
 }
 
@@ -259,8 +276,6 @@ process ALERAX_REPORT {
     """
 }
 
-
-
 workflow ALERAX_WORKFLOW {
 
     take:
@@ -282,7 +297,11 @@ workflow ALERAX_WORKFLOW {
 
     families_file_ch = families_out[0]
     families_mapping_dir_ch = families_out[1]
-    families_publish_ch = families_file_ch.mix(families_mapping_dir_ch)
+    families_gene_tree_dir_ch = families_out[2]
+
+    families_publish_ch = families_file_ch
+        .mix(families_mapping_dir_ch)
+        .mix(families_gene_tree_dir_ch)
 
     manifest_out = WRITE_ALERAX_MANIFEST(models.collect())
     manifest_file_ch = manifest_out[0]
@@ -320,6 +339,7 @@ workflow ALERAX_WORKFLOW {
 
     alerax_report_tsv_ch = alerax_report_out[0]
     alerax_done_ch = alerax_report_out[1]
+
     alerax_report_publish_ch = alerax_report_tsv_ch.mix(alerax_done_ch)
 
     emit:

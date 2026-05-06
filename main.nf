@@ -131,6 +131,23 @@ def makeIqtreeDirChannelFromDir(treeDir) {
         }
 }
 
+def makeAleraxInputChannelFromDirs(treeDir, ntDir) {
+    Channel
+        .fromPath("${treeDir}/og_*/og_*_iqtree.treefile", checkIfExists: true)
+        .map { treefile ->
+            def m = (treefile.baseName =~ /^og_(.+)_iqtree$/)
+            if (!m) {
+                throw new IllegalArgumentException("Could not parse OG from IQ-TREE filename: ${treefile}")
+            }
+
+            def og = m[0][1]
+            def iqtree_dir = treefile.parent
+            def nt = file("${ntDir}/og_${og}_NT.fasta", checkIfExists: true)
+
+            tuple(og, iqtree_dir, nt)
+        }
+}
+
 // Workflow
 workflow {
     main:
@@ -138,19 +155,7 @@ workflow {
     genespace_publish_ch = Channel.empty()
     post_outputs_ch = Channel.empty()
 
-    genomes_rows = readGenomesTable(params.genomes_tsv)
-
     def species_tree_path = params.species_tree?.toString()?.trim()
-
-    if (params.use_species_tree_for_orthofinder && !species_tree_path) {
-        error "--species_tree must be provided when --use_species_tree_for_orthofinder is true"
-    }
-
-    if (params.use_species_tree_for_alerax && !species_tree_path) {
-        error "--species_tree must be provided when --use_species_tree_for_alerax is true"
-    }
-
-    genomes_tsv_ch = Channel.value(file(params.genomes_tsv))
 
     def redipDefaults = [
         positions_source: 'bed',
@@ -180,6 +185,53 @@ workflow {
 
     def redipParams = redipDefaults + (params.rediploidisation ?: [:])
 
+    /*
+     * =========================
+     * ALERAX-ONLY MODE
+     * =========================
+     */
+    
+    if (params.start_mode == 'alerax') {
+        if (!params.run_alerax) {
+            error "--run_alerax must be true when --start_mode alerax"
+        }
+    
+        if (params.use_species_tree_for_alerax && !species_tree_path) {
+            error "--species_tree must be provided when --start_mode alerax and --use_species_tree_for_alerax is true"
+        }
+    
+        if (!params.alerax?.gene_trees_dir?.toString()?.trim()) {
+            error "--alerax.gene_trees_dir must be provided when --start_mode alerax"
+        }
+    
+        if (!params.alerax?.nt_alignments_dir?.toString()?.trim()) {
+            error "--alerax.nt_alignments_dir must be provided when --start_mode alerax"
+        }
+    
+        def alerax_models = resolveAleraxModels()
+        def alerax_models_ch = Channel.fromList(alerax_models)
+    
+        def species_tree_ch = params.use_species_tree_for_alerax
+            ? Channel.value(file(species_tree_path, checkIfExists: true))
+            : Channel.empty()
+    
+        def alerax_input_ch = makeAleraxInputChannelFromDirs(
+            params.alerax.gene_trees_dir,
+            params.alerax.nt_alignments_dir
+        )
+    
+        def alerax_out = ALERAX_WORKFLOW(
+            alerax_input_ch,
+            species_tree_ch,
+            alerax_models_ch
+        )
+    
+        post_outputs_ch = post_outputs_ch.mix(alerax_out.families)
+        post_outputs_ch = post_outputs_ch.mix(alerax_out.manifest)
+        post_outputs_ch = post_outputs_ch.mix(
+            alerax_out.results.map { model_id, dir -> dir }.collect()
+        )
+        post_outputs_ch = post_outputs_ch.mix(alerax_out.report)
 
     /*
      * =========================
@@ -187,7 +239,11 @@ workflow {
      * =========================
      */
 
-    if (params.start_mode == 'redip') {
+    } else if (params.start_mode == 'redip') {
+    
+        genomes_rows = readGenomesTable(params.genomes_tsv)
+        genomes_tsv_ch = Channel.value(file(params.genomes_tsv, checkIfExists: true))
+    
         if (!params.run_rediploidisation) {
             error "--run_rediploidisation must be true when --start_mode redip"
         }
@@ -242,12 +298,23 @@ workflow {
         post_outputs_ch = post_outputs_ch.mix(redip_out.report)
 
     } else {
-
+    
         /*
          * =========================
          * FULL / PARSED / GENESPACE PIPELINE
          * =========================
          */
+    
+        genomes_rows = readGenomesTable(params.genomes_tsv)
+        genomes_tsv_ch = Channel.value(file(params.genomes_tsv, checkIfExists: true))
+    
+        if (params.use_species_tree_for_orthofinder && !species_tree_path) {
+            error "--species_tree must be provided when --use_species_tree_for_orthofinder is true"
+        }
+    
+        if (params.use_species_tree_for_alerax && params.run_alerax && !species_tree_path) {
+            error "--species_tree must be provided when --run_alerax is true and --use_species_tree_for_alerax is true"
+        }
 
         genomes_ch = Channel
             .fromList(genomes_rows)
@@ -285,9 +352,6 @@ workflow {
         write_og_fastas_script_ch        = Channel.value(file('scripts/write_og_fastas.py'))
 
         genome_ids_ch = Channel.value(genomes_rows.collect { it.genome })
-
-        def alerax_models = resolveAleraxModels()
-        def alerax_models_ch = Channel.fromList(alerax_models)
 
         def validated_out = null
         def genespace_ready_out
@@ -379,7 +443,7 @@ workflow {
             genespace_ready_out = VALIDATE_GENESPACE_RESULTS(existing_wd_ch)
 
         } else {
-            error "Unsupported start_mode: ${params.start_mode}. Use 'full', 'parsed', 'genespace', or 'redip'."
+            error "Unsupported start_mode: ${params.start_mode}. Use 'full', 'parsed', 'genespace', 'alerax', or 'redip'."
         }
 
         if (params.start_mode != 'genespace') {
@@ -515,6 +579,9 @@ workflow {
             }
         
         if (params.run_alerax) {
+            def alerax_models = resolveAleraxModels()
+            def alerax_models_ch = Channel.fromList(alerax_models)
+        
             def species_tree_ch = params.use_species_tree_for_alerax
                 ? Channel.value(file(species_tree_path))
                 : Channel.empty()
