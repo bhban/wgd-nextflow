@@ -146,6 +146,7 @@ process RUN_ALERAX {
     tuple val(model['model_id']), path("alerax/${model['model_id']}")
 
     script:
+    def n_arg = params.alerax_mpi_n_arg ? "${params.alerax_mpi_n_arg} ${task.cpus}" : ""
     def model_id = model['model_id']
     def rec_model = model['rec_model']
     def model_param = model['model_parametrization']
@@ -161,14 +162,18 @@ process RUN_ALERAX {
     export TMP="\$PWD/mpi_tmp"
     export OMPI_MCA_orte_tmpdir_base="\$PWD/mpi_tmp"
 
-    mpirun --mca orte_tmpdir_base "\$PWD/mpi_tmp" ${params.alerax_bin} \\
-      -f ${families} \\
-      -s ${species_tree} \\
-      -p alerax/${model_id}/output \\
-      -r ${rec_model} \\
-      --model-parametrization ${model_param} \\
-      --gene-tree-samples ${gene_tree_samples} \\
-      > alerax/${model_id}/alerax.log 2>&1
+    ${params.alerax_mpi_launcher} \\
+        ${params.alerax_mpi_extra_args} \\
+        --mca orte_tmpdir_base "\$PWD/mpi_tmp" \\
+        ${n_arg} \\
+        ${params.alerax_bin} \\
+        -f ${families} \\
+        -s ${species_tree} \\
+        -p alerax/${model_id}/output \\
+        -r ${rec_model} \\
+        --model-parametrization ${model_param} \\
+        --gene-tree-samples ${gene_tree_samples} \\
+        > alerax/${model_id}/alerax.log 2>&1
 
     test -d alerax/${model_id}/output
     test -s alerax/${model_id}/alerax.log
