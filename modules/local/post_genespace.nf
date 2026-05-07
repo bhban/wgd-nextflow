@@ -17,12 +17,12 @@ process PANGENES_PASS_FILTER {
     """
     mkdir -p ${params.postdir}/pangenes
 
-    python ${pangenes_pass_filter_script} \\
-      --genespace-wd ${genespace_wd} \\
-      --genomes-tsv ${genomes_tsv} \\
-      --out-tsv ${params.postdir}/pangenes/pangenes_PASS.tsv \\
-      --out-og-list ${params.postdir}/pangenes/og_list_min4species.txt \\
-      ${requireOutgroupArg} \\
+    python ${pangenes_pass_filter_script} \
+      --genespace-wd ${genespace_wd} \
+      --genomes-tsv ${genomes_tsv} \
+      --out-tsv ${params.postdir}/pangenes/pangenes_PASS.tsv \
+      --out-og-list ${params.postdir}/pangenes/og_list_min4species.txt \
+      ${requireOutgroupArg} \
       > ${params.postdir}/pangenes/pangenes_pass_filter.log 2>&1
 
     test -s ${params.postdir}/pangenes/pangenes_PASS.tsv
@@ -54,14 +54,14 @@ process COLLAPSE_TANDEMS {
 
     test -s ${genespace_wd}/results/combBed.txt
 
-    python ${collapse_tandems_script} \\
-      --infile ${pass_tsv} \\
-      --combBed ${genespace_wd}/results/combBed.txt \\
-      --genomes-tsv ${genomes_tsv} \\
-      --outfile_filtered ${params.postdir}/pangenes/pangenes_PASS.collapsed.tsv \\
-      --outfile_tandems ${params.postdir}/tandem_collapse/tandem_report.tsv \\
-      --outfile_og_list ${params.postdir}/pangenes/og_list_min4species.collapsed.txt \\
-      ${requireOutgroupArg} \\
+    python ${collapse_tandems_script} \
+      --infile ${pass_tsv} \
+      --combBed ${genespace_wd}/results/combBed.txt \
+      --genomes-tsv ${genomes_tsv} \
+      --outfile_filtered ${params.postdir}/pangenes/pangenes_PASS.collapsed.tsv \
+      --outfile_tandems ${params.postdir}/tandem_collapse/tandem_report.tsv \
+      --outfile_og_list ${params.postdir}/pangenes/og_list_min4species.collapsed.txt \
+      ${requireOutgroupArg} \
       > ${params.postdir}/tandem_collapse/collapse_tandems.log 2>&1
 
     test -s ${params.postdir}/pangenes/pangenes_PASS.collapsed.tsv
@@ -78,35 +78,48 @@ process WRITE_OG_FASTAS {
     path og_list
     path genomes_tsv
     path cds_files
+    path protein_files
     path write_og_fastas_script
 
     output:
-    path("${params.postdir}/og_fasta")
+    path("${params.postdir}/og_fasta_cds")
+    path("${params.postdir}/og_fasta_aa")
     path("${params.postdir}/pangenes/*min4species*.txt")
     path("${params.postdir}/og_fasta/og_fastas.done")
     path("${params.postdir}/og_fasta/write_og_fastas.log")
 
     script:
     def cdsList = cds_files.collect { "\"${it}\"" }.join(' ')
+    def proteinList = protein_files.collect { "\"${it}\"" }.join(' ')
     def ogListOut = "${params.postdir}/pangenes/${og_list.getFileName()}"
     """
     mkdir -p ${params.postdir}/og_fasta
+    mkdir -p ${params.postdir}/og_fasta_cds
+    mkdir -p ${params.postdir}/og_fasta_aa
     mkdir -p ${params.postdir}/pangenes
     mkdir -p cds
+    mkdir -p protein
 
     for f in ${cdsList}; do
       cp "\$f" cds/
     done
 
-    python ${write_og_fastas_script} \\
-      --pangenes-pass ${pass_tsv} \\
-      --genomes-tsv ${genomes_tsv} \\
-      --cds-dir cds \\
-      --outdir ${params.postdir}/og_fasta \\
-      --og-list ${ogListOut} \\
+    for f in ${proteinList}; do
+      cp "\$f" protein/
+    done
+
+    python ${write_og_fastas_script} \
+      --pangenes-pass ${pass_tsv} \
+      --genomes-tsv ${genomes_tsv} \
+      --cds-dir cds \
+      --protein-dir protein \
+      --outdir-cds ${params.postdir}/og_fasta_cds \
+      --outdir-aa ${params.postdir}/og_fasta_aa \
+      --og-list ${ogListOut} \
       > ${params.postdir}/og_fasta/write_og_fastas.log 2>&1
 
-    compgen -G "${params.postdir}/og_fasta/og_*.fasta" > /dev/null
+    compgen -G "${params.postdir}/og_fasta_cds/og_*.fasta" > /dev/null
+    compgen -G "${params.postdir}/og_fasta_aa/og_*.fasta" > /dev/null
     test -s ${ogListOut}
     touch ${params.postdir}/og_fasta/og_fastas.done
     """
@@ -115,7 +128,6 @@ process WRITE_OG_FASTAS {
 process MACSE_ALIGN_OG {
     tag { "og_${og}" }
     array (params.array_size as int)
-    
 
     input:
     tuple val(og), path(fasta)
@@ -138,10 +150,10 @@ process MACSE_ALIGN_OG {
     export NUMEXPR_NUM_THREADS=${task.cpus}
     export MALLOC_ARENA_MAX=2
 
-    rm -f \\
-      ${params.postdir}/macse/og_${og}.status \\
-      ${params.postdir}/macse/og_${og}_AA.fasta \\
-      ${params.postdir}/macse/og_${og}_NT.fasta \\
+    rm -f \
+      ${params.postdir}/macse/og_${og}.status \
+      ${params.postdir}/macse/og_${og}_AA.fasta \
+      ${params.postdir}/macse/og_${og}_NT.fasta \
       ${params.postdir}/macse/og_${og}.log
 
     echo "STARTED" > ${params.postdir}/macse/og_${og}.status
@@ -149,8 +161,8 @@ process MACSE_ALIGN_OG {
     on_exit() {
         rc=\$?
         if [ ! -s ${params.postdir}/macse/og_${og}.status ] || grep -qx 'STARTED' ${params.postdir}/macse/og_${og}.status; then
-            rm -f \\
-              ${params.postdir}/macse/og_${og}_AA.fasta \\
+            rm -f \
+              ${params.postdir}/macse/og_${og}_AA.fasta \
               ${params.postdir}/macse/og_${og}_NT.fasta
 
             : > ${params.postdir}/macse/og_${og}_AA.fasta
@@ -162,14 +174,14 @@ process MACSE_ALIGN_OG {
     trap on_exit EXIT TERM INT
 
     set +e
-    /opt/conda/envs/macse/bin/java \\
-      -Xmx6g \\
-      -XX:ActiveProcessorCount=${task.cpus} \\
-      -jar /opt/conda/envs/macse/share/macse-2.07-0/macse_v2.07.jar \\
-      -prog alignSequences \\
-      -seq ${fasta} \\
-      -out_AA ${params.postdir}/macse/og_${og}_AA.fasta \\
-      -out_NT ${params.postdir}/macse/og_${og}_NT.fasta \\
+    /opt/conda/envs/macse/bin/java \
+      -Xmx6g \
+      -XX:ActiveProcessorCount=${task.cpus} \
+      -jar /opt/conda/envs/macse/share/macse-2.07-0/macse_v2.07.jar \
+      -prog alignSequences \
+      -seq ${fasta} \
+      -out_AA ${params.postdir}/macse/og_${og}_AA.fasta \
+      -out_NT ${params.postdir}/macse/og_${og}_NT.fasta \
       > ${params.postdir}/macse/og_${og}.log 2>&1
     rc=\$?
     set -e
@@ -177,8 +189,8 @@ process MACSE_ALIGN_OG {
     if [ \$rc -eq 0 ] && [ -s ${params.postdir}/macse/og_${og}_AA.fasta ] && [ -s ${params.postdir}/macse/og_${og}_NT.fasta ]; then
         echo "OK" > ${params.postdir}/macse/og_${og}.status
     else
-        rm -f \\
-          ${params.postdir}/macse/og_${og}_AA.fasta \\
+        rm -f \
+          ${params.postdir}/macse/og_${og}_AA.fasta \
           ${params.postdir}/macse/og_${og}_NT.fasta
 
         : > ${params.postdir}/macse/og_${og}_AA.fasta
@@ -204,17 +216,17 @@ process MACSE_REPORT {
     """
     mkdir -p ${params.postdir}/macse
 
-    echo -e "og\\tstatus" > ${params.postdir}/macse/macse_report.tsv
+    echo -e "og\tstatus" > ${params.postdir}/macse/macse_report.tsv
 
     find . -name 'og_*.status' -type f | sort | while read -r f; do
       og=\$(basename "\$f" .status | sed 's/^og_//')
-      st=\$(tr -d '\\r\\n' < "\$f")
+      st=\$(tr -d '\r\n' < "\$f")
       [ -n "\$st" ] || st="FAIL"
-      echo -e "\${og}\\t\${st}" >> ${params.postdir}/macse/macse_report.tsv
+      echo -e "\${og}\t\${st}" >> ${params.postdir}/macse/macse_report.tsv
     done
 
-    awk -F'\\t' 'NR > 1 && \$2 == "OK" { print \$1 }' \\
-      ${params.postdir}/macse/macse_report.tsv \\
+    awk -F'\t' 'NR > 1 && \$2 == "OK" { print \$1 }' \
+      ${params.postdir}/macse/macse_report.tsv \
       > ${params.postdir}/macse/macse_ok_og_list.txt
 
     test -s ${params.postdir}/macse/macse_report.tsv
@@ -222,7 +234,103 @@ process MACSE_REPORT {
     """
 }
 
-process IQTREE_OG {
+process MAFFT_ALIGN_AA {
+    tag { "og_${og}" }
+    array (params.array_size as int)
+
+    input:
+    tuple val(og), path(fasta)
+
+    output:
+    tuple val(og),
+          path("${params.postdir}/mafft_aa/og_${og}_AA.fasta"),
+          path("${params.postdir}/mafft_aa/og_${og}.status"),
+          path("${params.postdir}/mafft_aa/og_${og}.log")
+
+    script:
+    """
+    mkdir -p ${params.postdir}/mafft_aa
+
+    export OMP_NUM_THREADS=${task.cpus}
+    export OPENBLAS_NUM_THREADS=${task.cpus}
+    export MKL_NUM_THREADS=${task.cpus}
+    export VECLIB_MAXIMUM_THREADS=${task.cpus}
+    export NUMEXPR_NUM_THREADS=${task.cpus}
+    export MALLOC_ARENA_MAX=2
+
+    rm -f \
+      ${params.postdir}/mafft_aa/og_${og}.status \
+      ${params.postdir}/mafft_aa/og_${og}_AA.fasta \
+      ${params.postdir}/mafft_aa/og_${og}.log
+
+    echo "STARTED" > ${params.postdir}/mafft_aa/og_${og}.status
+
+    on_exit() {
+        rc=\$?
+        if [ ! -s ${params.postdir}/mafft_aa/og_${og}.status ] || grep -qx 'STARTED' ${params.postdir}/mafft_aa/og_${og}.status; then
+            rm -f ${params.postdir}/mafft_aa/og_${og}_AA.fasta
+            : > ${params.postdir}/mafft_aa/og_${og}_AA.fasta
+            echo "FAIL" > ${params.postdir}/mafft_aa/og_${og}.status
+        fi
+        exit \$rc
+    }
+    trap on_exit EXIT TERM INT
+
+    set +e
+    ${params.mafft_bin} \
+      ${params.mafft_opts} \
+      --thread ${task.cpus} \
+      ${fasta} \
+      > ${params.postdir}/mafft_aa/og_${og}_AA.fasta \
+      2> ${params.postdir}/mafft_aa/og_${og}.log
+    rc=\$?
+    set -e
+
+    if [ \$rc -eq 0 ] && [ -s ${params.postdir}/mafft_aa/og_${og}_AA.fasta ]; then
+        echo "OK" > ${params.postdir}/mafft_aa/og_${og}.status
+    else
+        rm -f ${params.postdir}/mafft_aa/og_${og}_AA.fasta
+        : > ${params.postdir}/mafft_aa/og_${og}_AA.fasta
+        echo "FAIL" > ${params.postdir}/mafft_aa/og_${og}.status
+    fi
+
+    trap - EXIT TERM INT
+    """
+}
+
+process MAFFT_REPORT {
+    tag "mafft_report"
+
+    input:
+    path mafft_results
+
+    output:
+    path("${params.postdir}/mafft_aa/mafft_report.tsv")
+    path("${params.postdir}/mafft_aa/mafft_ok_og_list.txt")
+
+    script:
+    """
+    mkdir -p ${params.postdir}/mafft_aa
+
+    echo -e "og\tstatus" > ${params.postdir}/mafft_aa/mafft_report.tsv
+
+    find . -name 'og_*.status' -type f | sort | while read -r f; do
+      og=\$(basename "\$f" .status | sed 's/^og_//')
+      st=\$(tr -d '\r\n' < "\$f")
+      [ -n "\$st" ] || st="FAIL"
+      echo -e "\${og}\t\${st}" >> ${params.postdir}/mafft_aa/mafft_report.tsv
+    done
+
+    awk -F'\t' 'NR > 1 && \$2 == "OK" { print \$1 }' \
+      ${params.postdir}/mafft_aa/mafft_report.tsv \
+      > ${params.postdir}/mafft_aa/mafft_ok_og_list.txt
+
+    test -s ${params.postdir}/mafft_aa/mafft_report.tsv
+    test -f ${params.postdir}/mafft_aa/mafft_ok_og_list.txt
+    """
+}
+
+process IQTREE_NT_OG {
     tag { "og_${og}" }
     array (params.array_size as int)
 
@@ -230,72 +338,152 @@ process IQTREE_OG {
     tuple val(og), path(aa), path(nt), path(status), path(macse_log)
 
     output:
-    tuple val(og), path("${params.postdir}/iqtree/og_${og}")
+    tuple val(og), path("${params.postdir}/iqtree_nt/og_${og}")
 
     script:
     """
-    mkdir -p ${params.postdir}/iqtree/og_${og}
+    mkdir -p ${params.postdir}/iqtree_nt/og_${og}
 
-    echo "STARTED" > ${params.postdir}/iqtree/og_${og}/og_${og}.iqtree.status
+    echo "STARTED" > ${params.postdir}/iqtree_nt/og_${og}/og_${og}.iqtree.status
 
-    if [ ! -s ${nt} ] || [ "\$(tr -d '\\r\\n' < ${status})" != "OK" ]; then
-        : > ${params.postdir}/iqtree/og_${og}/og_${og}_iqtree.treefile
-        : > ${params.postdir}/iqtree/og_${og}/og_${og}_iqtree.ufboot
-        echo "FAIL" > ${params.postdir}/iqtree/og_${og}/og_${og}.iqtree.status
+    if [ ! -s ${nt} ] || [ "\$(tr -d '\r\n' < ${status})" != "OK" ]; then
+        : > ${params.postdir}/iqtree_nt/og_${og}/og_${og}_iqtree.treefile
+        : > ${params.postdir}/iqtree_nt/og_${og}/og_${og}_iqtree.ufboot
+        echo "FAIL" > ${params.postdir}/iqtree_nt/og_${og}/og_${og}.iqtree.status
         exit 0
     fi
 
     set +e
-    ${params.iqtree_bin} \\
-      -s ${nt} \\
-      -T ${task.cpus} \\
-      -m MFP \\
-      -bb 1000 \\
-      -wbtl \\
-      -redo \\
-      -pre ${params.postdir}/iqtree/og_${og}/og_${og}_iqtree \\
-      > ${params.postdir}/iqtree/og_${og}/og_${og}.log 2>&1
+    ${params.iqtree_bin} \
+      -s ${nt} \
+      -st DNA \
+      -T ${task.cpus} \
+      -m ${params.iqtree_nt_model} \
+      -bb 1000 \
+      -wbtl \
+      -redo \
+      -pre ${params.postdir}/iqtree_nt/og_${og}/og_${og}_iqtree \
+      > ${params.postdir}/iqtree_nt/og_${og}/og_${og}.log 2>&1
     rc=\$?
     set -e
 
-    if [ \$rc -eq 0 ] && [ -s ${params.postdir}/iqtree/og_${og}/og_${og}_iqtree.treefile ] && [ -s ${params.postdir}/iqtree/og_${og}/og_${og}_iqtree.ufboot ]; then
-        echo "OK" > ${params.postdir}/iqtree/og_${og}/og_${og}.iqtree.status
+    if [ \$rc -eq 0 ] && [ -s ${params.postdir}/iqtree_nt/og_${og}/og_${og}_iqtree.treefile ] && [ -s ${params.postdir}/iqtree_nt/og_${og}/og_${og}_iqtree.ufboot ]; then
+        echo "OK" > ${params.postdir}/iqtree_nt/og_${og}/og_${og}.iqtree.status
     else
-        : > ${params.postdir}/iqtree/og_${og}/og_${og}_iqtree.treefile
-        : > ${params.postdir}/iqtree/og_${og}/og_${og}_iqtree.ufboot
-        echo "FAIL" > ${params.postdir}/iqtree/og_${og}/og_${og}.iqtree.status
+        : > ${params.postdir}/iqtree_nt/og_${og}/og_${og}_iqtree.treefile
+        : > ${params.postdir}/iqtree_nt/og_${og}/og_${og}_iqtree.ufboot
+        echo "FAIL" > ${params.postdir}/iqtree_nt/og_${og}/og_${og}.iqtree.status
     fi
     """
 }
 
-process IQTREE_REPORT {
-    tag "iqtree_report"
+process IQTREE_NT_REPORT {
+    tag "iqtree_nt_report"
 
     input:
     path iqtree_dirs
 
     output:
-    path("${params.postdir}/iqtree/iqtree_report.tsv")
-    path("${params.postdir}/iqtree/iqtree_ok_og_list.txt")
+    path("${params.postdir}/iqtree_nt/iqtree_nt_report.tsv")
+    path("${params.postdir}/iqtree_nt/iqtree_nt_ok_og_list.txt")
 
     script:
     """
-    mkdir -p ${params.postdir}/iqtree
+    mkdir -p ${params.postdir}/iqtree_nt
 
-    echo -e "og\\tstatus" > ${params.postdir}/iqtree/iqtree_report.tsv
+    echo -e "og\tstatus" > ${params.postdir}/iqtree_nt/iqtree_nt_report.tsv
 
     find . -name 'og_*.iqtree.status' -type f | sort | while read -r f; do
       og=\$(basename "\$f" .iqtree.status | sed 's/^og_//')
-      st=\$(tr -d '\\r\\n' < "\$f")
+      st=\$(tr -d '\r\n' < "\$f")
       [ -n "\$st" ] || st="FAIL"
-      echo -e "\${og}\\t\${st}" >> ${params.postdir}/iqtree/iqtree_report.tsv
+      echo -e "\${og}\t\${st}" >> ${params.postdir}/iqtree_nt/iqtree_nt_report.tsv
     done
 
-    awk -F'\\t' 'NR > 1 && \$2 == "OK" { print \$1 }' \\
-      ${params.postdir}/iqtree/iqtree_report.tsv \\
-      > ${params.postdir}/iqtree/iqtree_ok_og_list.txt
+    awk -F'\t' 'NR > 1 && \$2 == "OK" { print \$1 }' \
+      ${params.postdir}/iqtree_nt/iqtree_nt_report.tsv \
+      > ${params.postdir}/iqtree_nt/iqtree_nt_ok_og_list.txt
 
-    test -s ${params.postdir}/iqtree/iqtree_report.tsv
-    test -f ${params.postdir}/iqtree/iqtree_ok_og_list.txt
+    test -s ${params.postdir}/iqtree_nt/iqtree_nt_report.tsv
+    test -f ${params.postdir}/iqtree_nt/iqtree_nt_ok_og_list.txt
+    """
+}
+
+process IQTREE_AA_OG {
+    tag { "og_${og}" }
+    array (params.array_size as int)
+
+    input:
+    tuple val(og), path(aa), path(status), path(mafft_log)
+
+    output:
+    tuple val(og), path("${params.postdir}/iqtree_aa/og_${og}")
+
+    script:
+    """
+    mkdir -p ${params.postdir}/iqtree_aa/og_${og}
+
+    echo "STARTED" > ${params.postdir}/iqtree_aa/og_${og}/og_${og}.iqtree.status
+
+    if [ ! -s ${aa} ] || [ "\$(tr -d '\r\n' < ${status})" != "OK" ]; then
+        : > ${params.postdir}/iqtree_aa/og_${og}/og_${og}_iqtree.treefile
+        : > ${params.postdir}/iqtree_aa/og_${og}/og_${og}_iqtree.ufboot
+        echo "FAIL" > ${params.postdir}/iqtree_aa/og_${og}/og_${og}.iqtree.status
+        exit 0
+    fi
+
+    set +e
+    ${params.iqtree_bin} \
+      -s ${aa} \
+      -st AA \
+      -T ${task.cpus} \
+      -m ${params.iqtree_aa_model} \
+      -bb 1000 \
+      -wbtl \
+      -redo \
+      -pre ${params.postdir}/iqtree_aa/og_${og}/og_${og}_iqtree \
+      > ${params.postdir}/iqtree_aa/og_${og}/og_${og}.log 2>&1
+    rc=\$?
+    set -e
+
+    if [ \$rc -eq 0 ] && [ -s ${params.postdir}/iqtree_aa/og_${og}/og_${og}_iqtree.treefile ] && [ -s ${params.postdir}/iqtree_aa/og_${og}/og_${og}_iqtree.ufboot ]; then
+        echo "OK" > ${params.postdir}/iqtree_aa/og_${og}/og_${og}.iqtree.status
+    else
+        : > ${params.postdir}/iqtree_aa/og_${og}/og_${og}_iqtree.treefile
+        : > ${params.postdir}/iqtree_aa/og_${og}/og_${og}_iqtree.ufboot
+        echo "FAIL" > ${params.postdir}/iqtree_aa/og_${og}/og_${og}.iqtree.status
+    fi
+    """
+}
+
+process IQTREE_AA_REPORT {
+    tag "iqtree_aa_report"
+
+    input:
+    path iqtree_dirs
+
+    output:
+    path("${params.postdir}/iqtree_aa/iqtree_aa_report.tsv")
+    path("${params.postdir}/iqtree_aa/iqtree_aa_ok_og_list.txt")
+
+    script:
+    """
+    mkdir -p ${params.postdir}/iqtree_aa
+
+    echo -e "og\tstatus" > ${params.postdir}/iqtree_aa/iqtree_aa_report.tsv
+
+    find . -name 'og_*.iqtree.status' -type f | sort | while read -r f; do
+      og=\$(basename "\$f" .iqtree.status | sed 's/^og_//')
+      st=\$(tr -d '\r\n' < "\$f")
+      [ -n "\$st" ] || st="FAIL"
+      echo -e "\${og}\t\${st}" >> ${params.postdir}/iqtree_aa/iqtree_aa_report.tsv
+    done
+
+    awk -F'\t' 'NR > 1 && \$2 == "OK" { print \$1 }' \
+      ${params.postdir}/iqtree_aa/iqtree_aa_report.tsv \
+      > ${params.postdir}/iqtree_aa/iqtree_aa_ok_og_list.txt
+
+    test -s ${params.postdir}/iqtree_aa/iqtree_aa_report.tsv
+    test -f ${params.postdir}/iqtree_aa/iqtree_aa_ok_og_list.txt
     """
 }
