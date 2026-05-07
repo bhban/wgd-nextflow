@@ -155,18 +155,13 @@ process RUN_ALERAX {
     """
     mkdir -p alerax/${model_id}/output
     mkdir -p mpi_tmp
-
-    echo "=== SLURM variables visible inside AleRax container ==="
-    env | sort | grep '^SLURM_' || true
-    echo "=== MPI variables visible inside AleRax container ==="
-    env | sort | grep -E '^(OMPI|PMI|PMIX|MPI)_' || true
-
+    
     export TMPDIR="\$PWD/mpi_tmp"
     export TEMP="\$PWD/mpi_tmp"
     export TMP="\$PWD/mpi_tmp"
     export OMPI_MCA_orte_tmpdir_base="\$PWD/mpi_tmp"
 
-    mpiexec --mca orte_tmpdir_base "\$PWD/mpi_tmp" -np ${params.alerax_mpi_ranks} ${params.alerax_bin} \\
+    mpirun --mca orte_tmpdir_base "\$PWD/mpi_tmp" ${params.alerax_bin} \\
       -f ${families} \\
       -s ${species_tree} \\
       -p alerax/${model_id}/output \\
@@ -214,7 +209,7 @@ process RUN_ALERAX_RANDOM {
     export TMP="\$PWD/mpi_tmp"
     export OMPI_MCA_orte_tmpdir_base="\$PWD/mpi_tmp"
 
-    mpiexec --mca orte_tmpdir_base "\$PWD/mpi_tmp" -np ${params.alerax_mpi_ranks} ${params.alerax_bin} \\
+    mpirun --mca orte_tmpdir_base "\$PWD/mpi_tmp" ${params.alerax_bin} \\
       -f ${families} \\
       -s random \\
       -p alerax/${model_id}/output \\
