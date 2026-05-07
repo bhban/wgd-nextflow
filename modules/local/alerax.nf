@@ -156,6 +156,11 @@ process RUN_ALERAX {
     mkdir -p alerax/${model_id}/output
     mkdir -p mpi_tmp
 
+    echo "=== SLURM variables visible inside AleRax container ==="
+    env | sort | grep '^SLURM_' || true
+    echo "=== MPI variables visible inside AleRax container ==="
+    env | sort | grep -E '^(OMPI|PMI|PMIX|MPI)_' || true
+
     export TMPDIR="\$PWD/mpi_tmp"
     export TEMP="\$PWD/mpi_tmp"
     export TMP="\$PWD/mpi_tmp"
