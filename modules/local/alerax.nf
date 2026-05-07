@@ -161,7 +161,7 @@ process RUN_ALERAX {
     export TMP="\$PWD/mpi_tmp"
     export OMPI_MCA_orte_tmpdir_base="\$PWD/mpi_tmp"
 
-    mpiexec --mca orte_tmpdir_base "\$PWD/mpi_tmp" -np ${task.cpus} ${params.alerax_bin} \\
+    mpiexec --mca orte_tmpdir_base "\$PWD/mpi_tmp" -np ${params.alerax_mpi_ranks} ${params.alerax_bin} \\
       -f ${families} \\
       -s ${species_tree} \\
       -p alerax/${model_id}/output \\
@@ -209,7 +209,7 @@ process RUN_ALERAX_RANDOM {
     export TMP="\$PWD/mpi_tmp"
     export OMPI_MCA_orte_tmpdir_base="\$PWD/mpi_tmp"
 
-    mpiexec --mca orte_tmpdir_base "\$PWD/mpi_tmp" -np ${task.cpus} ${params.alerax_bin} \\
+    mpiexec --mca orte_tmpdir_base "\$PWD/mpi_tmp" -np ${params.alerax_mpi_ranks} ${params.alerax_bin} \\
       -f ${families} \\
       -s random \\
       -p alerax/${model_id}/output \\
