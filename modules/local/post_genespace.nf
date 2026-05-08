@@ -250,6 +250,12 @@ process MAFFT_ALIGN_AA {
     script:
     """
     mkdir -p ${params.postdir}/mafft_aa
+    mkdir -p tmp
+
+    export TMPDIR="\$PWD/tmp"
+    export TMP="\$TMPDIR"
+    export TEMP="\$TMPDIR"
+    export MAFFT_TMPDIR="\$TMPDIR"
 
     export OMP_NUM_THREADS=${task.cpus}
     export OPENBLAS_NUM_THREADS=${task.cpus}
@@ -258,9 +264,9 @@ process MAFFT_ALIGN_AA {
     export NUMEXPR_NUM_THREADS=${task.cpus}
     export MALLOC_ARENA_MAX=2
 
-    rm -f \
-      ${params.postdir}/mafft_aa/og_${og}.status \
-      ${params.postdir}/mafft_aa/og_${og}_AA.fasta \
+    rm -f \\
+      ${params.postdir}/mafft_aa/og_${og}.status \\
+      ${params.postdir}/mafft_aa/og_${og}_AA.fasta \\
       ${params.postdir}/mafft_aa/og_${og}.log
 
     echo "STARTED" > ${params.postdir}/mafft_aa/og_${og}.status
@@ -277,11 +283,11 @@ process MAFFT_ALIGN_AA {
     trap on_exit EXIT TERM INT
 
     set +e
-    ${params.mafft_bin} \
-      ${params.mafft_opts} \
-      --thread ${task.cpus} \
-      ${fasta} \
-      > ${params.postdir}/mafft_aa/og_${og}_AA.fasta \
+    ${params.mafft_bin} \\
+      ${params.mafft_opts} \\
+      --thread ${task.cpus} \\
+      ${fasta} \\
+      > ${params.postdir}/mafft_aa/og_${og}_AA.fasta \\
       2> ${params.postdir}/mafft_aa/og_${og}.log
     rc=\$?
     set -e
@@ -292,6 +298,7 @@ process MAFFT_ALIGN_AA {
         rm -f ${params.postdir}/mafft_aa/og_${og}_AA.fasta
         : > ${params.postdir}/mafft_aa/og_${og}_AA.fasta
         echo "FAIL" > ${params.postdir}/mafft_aa/og_${og}.status
+        exit 1
     fi
 
     trap - EXIT TERM INT
