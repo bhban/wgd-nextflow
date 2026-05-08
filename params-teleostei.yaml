@@ -1,0 +1,34 @@
+sif_paths:
+  genespace: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/genespace_1.1.sif"
+  macse: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/macse_1.0.sif"
+  mafft: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/mafft_1.0.sif"
+  iqtree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/iqtree_1.0.sif"
+  alerax: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/alerax_1.0.sif"
+  annevo: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/annevo_1.0.sif"
+  gffutils: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/gffutils_1.0.sif"
+  redip: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip_1.0.sif"
+
+genomes_tsv: "/exports/eddie/scratch/s2428892/wgd-nextflow/input/genomes.tsv"
+species_tree: "/exports/eddie/scratch/s2428892/wgd-nextflow/input/species_tree.nwk"
+
+working_dir: "workingDir"
+postdir: "post_genespace"
+
+gff_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/input/gff_truncated"
+protein_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/input/protein"
+cds_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/input/cds"
+chr_dict_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/input/chr_dict"
+
+start_mode: 'full'
+
+annotation:
+  run: false
+run_rediploidisation: true
+run_alerax: false
+
+run_external_orthofinder: false
+
+require_outgroup_og: true
+collapse_tandems: true
+
+alignment_method: 'mafft_aa'
