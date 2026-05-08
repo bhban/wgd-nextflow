@@ -8,16 +8,16 @@ sif_paths:
   gffutils: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/gffutils_1.0.sif"
   redip: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip_1.0.sif"
 
-genomes_tsv: "/exports/eddie/scratch/s2428892/wgd-nextflow/input/genomes.tsv"
-species_tree: "/exports/eddie/scratch/s2428892/wgd-nextflow/input/species_tree.nwk"
+genomes_tsv: "/exports/eddie/scratch/s2428892/nf-teleostei/input/genomes.tsv"
+species_tree: "/exports/eddie/scratch/s2428892/nf-teleostei/input/species_tree.nwk"
 
 working_dir: "workingDir"
 postdir: "post_genespace"
 
-gff_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/input/gff_truncated"
-protein_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/input/protein"
-cds_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/input/cds"
-chr_dict_dir: "/exports/eddie/scratch/s2428892/wgd-nextflow/input/chr_dict"
+gff_dir: "/exports/eddie/scratch/s2428892/nf-teleostei/input/gff_truncated"
+protein_dir: "/exports/eddie/scratch/s2428892/nf-teleostei/input/protein"
+cds_dir: "/exports/eddie/scratch/s2428892/nf-teleostei/input/cds"
+chr_dict_dir: "/exports/eddie/scratch/s2428892/nf-teleostei/input/chr_dict"
 
 start_mode: 'full'
 
