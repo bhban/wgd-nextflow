@@ -14,7 +14,7 @@ species_tree: "/exports/eddie/scratch/s2428892/nf-teleostei/input/species_tree.n
 working_dir: "workingDir"
 postdir: "post_genespace"
 
-gff_dir: "/exports/eddie/scratch/s2428892/nf-teleostei/input/gff_truncated"
+gff_dir: "/exports/eddie/scratch/s2428892/nf-teleostei/input/gff"
 protein_dir: "/exports/eddie/scratch/s2428892/nf-teleostei/input/protein"
 cds_dir: "/exports/eddie/scratch/s2428892/nf-teleostei/input/cds"
 chr_dict_dir: "/exports/eddie/scratch/s2428892/nf-teleostei/input/chr_dict"
