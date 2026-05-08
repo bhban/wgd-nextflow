@@ -112,10 +112,14 @@ process CLASSIFY_REDIP_EVENTS {
     mkdir -p rediploidisation/classifications
 
     : > ${species}.rooted_gene_trees.nwk
-
+    
     for tree in ${tree_list}; do
-        cat "\$tree" >> ${species}.rooted_gene_trees.nwk
-        echo >> ${species}.rooted_gene_trees.nwk
+        tree_base=\$(basename "\$tree")
+    
+        while IFS= read -r newick; do
+            [ -z "\$newick" ] && continue
+            printf "%s\t%s\n" "\$tree_base" "\$newick" >> ${species}.rooted_gene_trees.nwk
+        done < "\$tree"
     done
 
     python ${classify_script} \\
