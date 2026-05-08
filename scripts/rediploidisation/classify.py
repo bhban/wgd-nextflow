@@ -414,7 +414,6 @@ def write_rows(
 def process_treefile(args: argparse.Namespace) -> List[List[str]]:
     all_rows: List[List[str]] = []
     tree_path = Path(args.treefile)
-    tree_name = tree_path.name
 
     allowed_species = set(
         read_redip_species(
@@ -425,11 +424,20 @@ def process_treefile(args: argparse.Namespace) -> List[List[str]]:
 
     with open(args.treefile, "r") as handle:
         for line_number, line in enumerate(handle, start=1):
-            newick = line.strip()
-
+            line = line.strip()
+    
+            if not line:
+                continue
+    
+            if "\t" in line:
+                tree_name, newick = line.split("\t", 1)
+            else:
+                tree_name = tree_path.name
+                newick = line
+    
             if not newick:
                 continue
-
+    
             try:
                 tree = ete3.Tree(newick)
             except Exception as exc:

@@ -3,7 +3,7 @@ nextflow.enable.dsl=2
 include { RUN_ANNEVO; ANNEVO_GFF_TO_FASTA } from './modules/local/annotation'
 include { PRIMARY_TRANSCRIPT; FINALIZE_REPO_IDS } from './modules/local/prep'
 include { STAGE_GENOMEREPO; PARSE_ANNOTATIONS_BY_SOURCE; MAKE_PARSE_DONE; VALIDATE_PARSE_OUTPUTS; VALIDATE_GENESPACE_RESULTS; ORTHOFINDER_OR_SKIP; RUN_GENESPACE } from './modules/local/genespace'
-include { PANGENES_PASS_FILTER; COLLAPSE_TANDEMS; WRITE_OG_FASTAS; MACSE_ALIGN_OG; MACSE_REPORT; IQTREE_OG; IQTREE_REPORT } from './modules/local/post_genespace'
+include { PANGENES_PASS_FILTER; COLLAPSE_TANDEMS; WRITE_OG_FASTAS; MACSE_ALIGN_OG; MACSE_REPORT; MAFFT_ALIGN_AA; MAFFT_REPORT; IQTREE_NT_OG; IQTREE_NT_REPORT; IQTREE_AA_OG; IQTREE_AA_REPORT } from './modules/local/post_genespace'
 include { ALERAX_WORKFLOW } from './modules/local/alerax'
 include { REDIPLOIDISATION } from './modules/local/rediploidisation'
 
@@ -148,6 +148,22 @@ def makeAleraxInputChannelFromDirs(treeDir, ntDir) {
         }
 }
 
+def makeOgFastaChannelFromDirChannel(dir_ch) {
+    dir_ch.flatMap { og_dir ->
+        og_dir.listFiles()
+            .findAll { it.name ==~ /og_.+\.fasta/ }
+            .sort { a, b -> a.name <=> b.name }
+            .collect { fasta ->
+                def m = (fasta.baseName =~ /^og_(.+)$/)
+                if (!m) {
+                    throw new IllegalArgumentException("Could not parse OG from filename: ${fasta}")
+                }
+                tuple(m[0][1], fasta)
+            }
+    }
+}
+
+
 // Workflow
 workflow {
     main:
@@ -156,6 +172,17 @@ workflow {
     post_outputs_ch = Channel.empty()
 
     def species_tree_path = params.species_tree?.toString()?.trim()
+
+    def allowed_alignment_methods = ['macse_nt', 'mafft_aa', 'both']
+    def alignment_method = params.alignment_method?.toString()?.trim() ?: 'macse_nt'
+
+    if (!allowed_alignment_methods.contains(alignment_method)) {
+        error "Unsupported --alignment_method '${alignment_method}'. Use one of: ${allowed_alignment_methods.join(', ')}"
+    }
+
+    def run_macse_nt_branch = alignment_method in ['macse_nt', 'both']
+    def run_mafft_aa_branch = alignment_method in ['mafft_aa', 'both']
+
 
     def redipDefaults = [
         positions_source: 'bed',
@@ -190,42 +217,42 @@ workflow {
      * ALERAX-ONLY MODE
      * =========================
      */
-    
+
     if (params.start_mode == 'alerax') {
         if (!params.run_alerax) {
             error "--run_alerax must be true when --start_mode alerax"
         }
-    
+
         if (params.use_species_tree_for_alerax && !species_tree_path) {
             error "--species_tree must be provided when --start_mode alerax and --use_species_tree_for_alerax is true"
         }
-    
+
         if (!params.alerax?.gene_trees_dir?.toString()?.trim()) {
             error "--alerax.gene_trees_dir must be provided when --start_mode alerax"
         }
-    
+
         if (!params.alerax?.nt_alignments_dir?.toString()?.trim()) {
             error "--alerax.nt_alignments_dir must be provided when --start_mode alerax"
         }
-    
+
         def alerax_models = resolveAleraxModels()
         def alerax_models_ch = Channel.fromList(alerax_models)
-    
+
         def species_tree_ch = params.use_species_tree_for_alerax
             ? Channel.value(file(species_tree_path, checkIfExists: true))
             : Channel.empty()
-    
+
         def alerax_input_ch = makeAleraxInputChannelFromDirs(
             params.alerax.gene_trees_dir,
             params.alerax.nt_alignments_dir
         )
-    
+
         def alerax_out = ALERAX_WORKFLOW(
             alerax_input_ch,
             species_tree_ch,
             alerax_models_ch
         )
-    
+
         post_outputs_ch = post_outputs_ch.mix(alerax_out.families)
         post_outputs_ch = post_outputs_ch.mix(alerax_out.manifest)
         post_outputs_ch = post_outputs_ch.mix(
@@ -240,10 +267,10 @@ workflow {
      */
 
     } else if (params.start_mode == 'redip') {
-    
+
         genomes_rows = readGenomesTable(params.genomes_tsv)
         genomes_tsv_ch = Channel.value(file(params.genomes_tsv, checkIfExists: true))
-    
+
         if (!params.run_rediploidisation) {
             error "--run_rediploidisation must be true when --start_mode redip"
         }
@@ -255,25 +282,25 @@ workflow {
         if (!redipParams.gene_trees_dir?.toString()?.trim()) {
             error "--rediploidisation.gene_trees_dir must be provided when --start_mode redip"
         }
-        
+
         if (
             redipParams.positions_source != 'positions' &&
             !redipParams.genespace_wd?.toString()?.trim()
         ) {
             error "--rediploidisation.genespace_wd must be provided unless positions_source = positions"
         }
-        
+
         if (
             redipParams.positions_source == 'positions' &&
             !redipParams.positions?.toString()?.trim()
         ) {
             error "--rediploidisation.positions must be provided when positions_source = positions"
         }
-        
+
         def redip_genespace_wd_ch = redipParams.genespace_wd?.toString()?.trim()
             ? Channel.value(file(redipParams.genespace_wd))
             : Channel.value(file('.'))
-        
+
         def redip_out = REDIPLOIDISATION(
             genomes_tsv_ch,
             Channel.value(file(species_tree_path)),
@@ -298,20 +325,20 @@ workflow {
         post_outputs_ch = post_outputs_ch.mix(redip_out.report)
 
     } else {
-    
+
         /*
          * =========================
          * FULL / PARSED / GENESPACE PIPELINE
          * =========================
          */
-    
+
         genomes_rows = readGenomesTable(params.genomes_tsv)
         genomes_tsv_ch = Channel.value(file(params.genomes_tsv, checkIfExists: true))
-    
+
         if (params.use_species_tree_for_orthofinder && !species_tree_path) {
             error "--species_tree must be provided when --use_species_tree_for_orthofinder is true"
         }
-    
+
         if (params.use_species_tree_for_alerax && params.run_alerax && !species_tree_path) {
             error "--species_tree must be provided when --run_alerax is true and --use_species_tree_for_alerax is true"
         }
@@ -322,7 +349,7 @@ workflow {
                 def fasta = params.annotation?.run
                     ? resolveGenomeFasta(row.genome)
                     : null
-        
+
                 tuple(
                     row.genome,
                     row.source,
@@ -334,7 +361,8 @@ workflow {
                 )
             }
 
-        cds_files_ch = Channel.fromPath("${params.cds_dir}/*.cds").collect()
+        cds_files_ch = Channel.fromPath("${params.cds_dir}/*.cds", checkIfExists: true).collect()
+        protein_files_ch = Channel.fromPath("${params.protein_dir}/*.${params.ext.pep}", checkIfExists: true).collect()
 
         def orthofinder_species_tree_ch = (
             params.use_species_tree_for_orthofinder && species_tree_path
@@ -377,6 +405,10 @@ workflow {
 
                 cds_files_ch = annevo_fasta_out
                     .map { genome, source, ploidy, gff, pep, chr, cds -> cds }
+                    .collect()
+
+                protein_files_ch = annevo_fasta_out
+                    .map { genome, source, ploidy, gff, pep, chr, cds -> pep }
                     .collect()
 
             } else {
@@ -514,84 +546,128 @@ workflow {
             og_list_for_og,
             genomes_tsv_ch,
             cds_files_ch,
+            protein_files_ch,
             write_og_fastas_script_ch
         )
 
         post_outputs_ch = post_outputs_ch.mix(og_fastas_out)
 
-        og_fasta_ch = og_fastas_out[0]
-            .flatMap { og_dir ->
-                og_dir.listFiles()
-                    .findAll { it.name ==~ /og_.+\.fasta/ }
-                    .sort { a, b -> a.name <=> b.name }
-                    .collect { fasta ->
-                        def m = (fasta.baseName =~ /^og_(.+)$/)
-                        if (!m) {
-                            throw new IllegalArgumentException("Could not parse OG from filename: ${fasta}")
+        og_cds_fasta_ch = makeOgFastaChannelFromDirChannel(og_fastas_out[0])
+        og_aa_fasta_ch  = makeOgFastaChannelFromDirChannel(og_fastas_out[1])
+
+        def iqtree_nt_out = Channel.empty()
+        def iqtree_aa_out = Channel.empty()
+        def iqtree_nt_for_alerax_ch = Channel.empty()
+        def iqtree_aa_for_alerax_ch = Channel.empty()
+        def iqtree_for_alerax_ch = Channel.empty()
+        def iqtree_for_redip_ch = Channel.empty()
+
+        if (run_macse_nt_branch) {
+            macse_out = MACSE_ALIGN_OG(og_cds_fasta_ch)
+
+            macse_all_outputs_ch = macse_out
+                .flatMap { og, aa, nt, status, log -> [aa, nt, status, log] }
+                .collect()
+
+            macse_report_out = MACSE_REPORT(macse_all_outputs_ch)
+
+            post_outputs_ch = post_outputs_ch.mix(macse_all_outputs_ch)
+            post_outputs_ch = post_outputs_ch.mix(macse_report_out)
+
+            iqtree_nt_in = macse_out.filter { og, aa, nt, status, log ->
+                status.text.trim() == 'OK'
+            }
+
+            iqtree_nt_out = IQTREE_NT_OG(iqtree_nt_in)
+
+            iqtree_nt_dirs_ch = iqtree_nt_out
+                .map { og, iqtree_dir -> iqtree_dir }
+                .collect()
+
+            iqtree_nt_report_out = IQTREE_NT_REPORT(iqtree_nt_dirs_ch)
+
+            post_outputs_ch = post_outputs_ch.mix(iqtree_nt_dirs_ch)
+            post_outputs_ch = post_outputs_ch.mix(iqtree_nt_report_out)
+
+            iqtree_nt_for_alerax_ch = iqtree_nt_out
+                .join(
+                    macse_out
+                        .filter { og, aa, nt, status, log ->
+                            status.text.trim() == 'OK'
                         }
-                        tuple(m[0][1], fasta)
-                    }
-            }
-
-        macse_out = MACSE_ALIGN_OG(og_fasta_ch)
-
-        macse_all_outputs_ch = macse_out
-            .flatMap { og, aa, nt, status, log -> [aa, nt, status, log] }
-            .collect()
-
-        macse_report_out = MACSE_REPORT(macse_all_outputs_ch)
-
-        post_outputs_ch = post_outputs_ch.mix(macse_all_outputs_ch)
-        post_outputs_ch = post_outputs_ch.mix(macse_report_out)
-
-        iqtree_in = macse_out.filter { og, aa, nt, status, log ->
-            status.text.trim() == 'OK'
+                        .map { og, aa, nt, status, log ->
+                            tuple(og, nt)
+                        }
+                )
+                .map { og, iqtree_dir, aln ->
+                    tuple(og, iqtree_dir, aln)
+                }
         }
-        
-        iqtree_out = IQTREE_OG(iqtree_in)
-        
-        iqtree_dirs_ch = iqtree_out
-            .map { og, iqtree_dir -> iqtree_dir }
-            .collect()
-        
-        iqtree_report_out = IQTREE_REPORT(iqtree_dirs_ch)
-        
-        post_outputs_ch = post_outputs_ch.mix(iqtree_dirs_ch)
-        post_outputs_ch = post_outputs_ch.mix(iqtree_report_out)
-        
-        iqtree_for_alerax_ch = iqtree_out
-            .join(
-                macse_out
-                    .filter { og, aa, nt, status, log ->
-                        status.text.trim() == 'OK'
-                    }
-                    .map { og, aa, nt, status, log ->
-                        tuple(og, nt)
-                    }
-            )
-            .map { og, iqtree_dir, nt ->
-                tuple(og, iqtree_dir, nt)
+
+        if (run_mafft_aa_branch) {
+            mafft_out = MAFFT_ALIGN_AA(og_aa_fasta_ch)
+
+            mafft_all_outputs_ch = mafft_out
+                .flatMap { og, aa, status, log -> [aa, status, log] }
+                .collect()
+
+            mafft_report_out = MAFFT_REPORT(mafft_all_outputs_ch)
+
+            post_outputs_ch = post_outputs_ch.mix(mafft_all_outputs_ch)
+            post_outputs_ch = post_outputs_ch.mix(mafft_report_out)
+
+            iqtree_aa_in = mafft_out.filter { og, aa, status, log ->
+                status.text.trim() == 'OK'
             }
-        
-        iqtree_for_redip_ch = iqtree_out
-            .map { og, iqtree_dir ->
-                tuple(og, iqtree_dir)
-            }
-        
+
+            iqtree_aa_out = IQTREE_AA_OG(iqtree_aa_in)
+
+            iqtree_aa_dirs_ch = iqtree_aa_out
+                .map { og, iqtree_dir -> iqtree_dir }
+                .collect()
+
+            iqtree_aa_report_out = IQTREE_AA_REPORT(iqtree_aa_dirs_ch)
+
+            post_outputs_ch = post_outputs_ch.mix(iqtree_aa_dirs_ch)
+            post_outputs_ch = post_outputs_ch.mix(iqtree_aa_report_out)
+
+            iqtree_aa_for_alerax_ch = iqtree_aa_out
+                .join(
+                    mafft_out
+                        .filter { og, aa, status, log ->
+                            status.text.trim() == 'OK'
+                        }
+                        .map { og, aa, status, log ->
+                            tuple(og, aa)
+                        }
+                )
+                .map { og, iqtree_dir, aln ->
+                    tuple(og, iqtree_dir, aln)
+                }
+        }
+
         if (params.run_alerax) {
+            if (run_mafft_aa_branch) {
+                iqtree_for_alerax_ch = iqtree_aa_for_alerax_ch
+            } else if (run_macse_nt_branch) {
+                iqtree_for_alerax_ch = iqtree_nt_for_alerax_ch
+            } else {
+                error "No IQ-TREE results are available for AleRax"
+            }
+
             def alerax_models = resolveAleraxModels()
             def alerax_models_ch = Channel.fromList(alerax_models)
-        
+
             def species_tree_ch = params.use_species_tree_for_alerax
                 ? Channel.value(file(species_tree_path))
                 : Channel.empty()
-        
+
             def alerax_out = ALERAX_WORKFLOW(
                 iqtree_for_alerax_ch,
                 species_tree_ch,
                 alerax_models_ch
             )
-        
+
             post_outputs_ch = post_outputs_ch.mix(alerax_out.families)
             post_outputs_ch = post_outputs_ch.mix(alerax_out.manifest)
             post_outputs_ch = post_outputs_ch.mix(
@@ -604,32 +680,38 @@ workflow {
             if (!species_tree_path) {
                 error "--species_tree must be provided when --run_rediploidisation is true"
             }
-        
+
             if (
                 redipParams.positions_source == 'positions' &&
                 !redipParams.positions?.toString()?.trim()
             ) {
                 error "--rediploidisation.positions must be provided when positions_source = positions"
             }
-        
+
             def redip_gene_trees_dir = redipParams.gene_trees_dir?.toString()?.trim()
-        
-            def redip_iqtree_ch = redip_gene_trees_dir
-                ? makeIqtreeDirChannelFromDir(redip_gene_trees_dir)
-                : iqtree_for_redip_ch
-        
+
+            if (redip_gene_trees_dir) {
+                iqtree_for_redip_ch = makeIqtreeDirChannelFromDir(redip_gene_trees_dir)
+            } else if (run_mafft_aa_branch) {
+                iqtree_for_redip_ch = iqtree_aa_out.map { og, iqtree_dir -> tuple(og, iqtree_dir) }
+            } else if (run_macse_nt_branch) {
+                iqtree_for_redip_ch = iqtree_nt_out.map { og, iqtree_dir -> tuple(og, iqtree_dir) }
+            } else {
+                error "No IQ-TREE results are available for rediploidisation"
+            }
+
             def redip_genespace_wd_ch = redipParams.genespace_wd?.toString()?.trim()
                 ? Channel.value(file(redipParams.genespace_wd))
                 : genespace_ready_out[0]
-        
+
             def redip_out = REDIPLOIDISATION(
                 genomes_tsv_ch,
                 Channel.value(file(species_tree_path)),
-                redip_iqtree_ch,
+                iqtree_for_redip_ch,
                 redip_genespace_wd_ch,
                 redipParams
             )
-        
+
             post_outputs_ch = post_outputs_ch.mix(
                 redip_out.rooted_trees.flatMap { og, tree, summary -> [tree, summary] }.collect()
             )
@@ -646,6 +728,7 @@ workflow {
             post_outputs_ch = post_outputs_ch.mix(redip_out.report)
         }
     }
+
     /*
      * =========================
      * SINGLE PUBLISH BLOCK
