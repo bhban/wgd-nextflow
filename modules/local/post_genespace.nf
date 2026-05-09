@@ -286,7 +286,6 @@ process MAFFT_ALIGN_AA {
     ${params.mafft_bin} \\
       ${params.mafft_opts} \\
       --thread ${task.cpus} \\
-      --any-symbol \\
       ${fasta} \\
       > ${params.postdir}/mafft_aa/og_${og}_AA.fasta \\
       2> ${params.postdir}/mafft_aa/og_${og}.log
