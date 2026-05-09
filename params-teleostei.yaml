@@ -20,7 +20,7 @@ cds_dir: "/exports/eddie/scratch/s2428892/nf-teleostei/input/cds"
 chr_dict_dir: "/exports/eddie/scratch/s2428892/nf-teleostei/input/chr_dict"
 
 start_mode: 'genespace'
-existing_genespace_wd: '/exports/eddie/scratch/s2428892/nf-teleostei/workingDir/workingDir'
+existing_genespace_wd: '/exports/eddie/scratch/s2428892/nf-teleostei/results/workingDir/workingDir'
 
 annotation:
   run: false
