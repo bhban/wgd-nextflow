@@ -7,7 +7,7 @@ LABEL org.opencontainers.image.source="https://github.com/bhban/wgd-nextflow"
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-RUN mamba install -y \
+RUN mamba create -y -n treeclean \
       -c conda-forge \
       -c smirarab \
       python=3.9 \
@@ -18,8 +18,13 @@ RUN mamba install -y \
       sed \
       coreutils \
       bash \
-    && pip install --no-cache-dir ete3==3.1.3 \
     && mamba clean -a -y
+
+RUN conda run -n treeclean pip install --no-cache-dir ete3==3.1.3
+
+ENV PATH=/opt/conda/envs/treeclean/bin:$PATH
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
 
 RUN run_treeshrink.py -h >/dev/null \
     && python - <<'PY'
@@ -28,6 +33,3 @@ t = Tree("(A:0.1,B:0.2);", format=1)
 assert len(t) == 2
 print("treeclean container OK")
 PY
-
-ENV LC_ALL=C.UTF-8
-ENV LANG=C.UTF-8
