@@ -6,6 +6,7 @@ include { STAGE_GENOMEREPO; PARSE_ANNOTATIONS_BY_SOURCE; MAKE_PARSE_DONE; VALIDA
 include { PANGENES_PASS_FILTER; COLLAPSE_TANDEMS; WRITE_OG_FASTAS; MACSE_ALIGN_OG; MACSE_REPORT; MAFFT_ALIGN_AA; MAFFT_REPORT; IQTREE_NT_OG; IQTREE_NT_REPORT; IQTREE_AA_OG; IQTREE_AA_REPORT } from './modules/local/post_genespace'
 include { ALERAX_WORKFLOW } from './modules/local/alerax'
 include { REDIPLOIDISATION } from './modules/local/rediploidisation'
+include { TREECLEAN } from './modules/local/treeclean'
 
 
 // Helper functions
@@ -561,6 +562,9 @@ workflow {
         def iqtree_aa_for_alerax_ch = Channel.empty()
         def iqtree_for_alerax_ch = Channel.empty()
         def iqtree_for_redip_ch = Channel.empty()
+        def treeclean_out = null
+        def treeclean_for_alerax_ch = Channel.empty()
+        def treeclean_for_redip_ch = Channel.empty()
 
         if (run_macse_nt_branch) {
             macse_out = MACSE_ALIGN_OG(og_cds_fasta_ch)
@@ -646,8 +650,30 @@ workflow {
                 }
         }
 
+        if (params.run_tree_cleaning) {
+            if (!run_macse_nt_branch) {
+                error "--run_tree_cleaning requires --alignment_method macse_nt or both, because tree cleaning currently re-aligns CDS with MACSE"
+            }
+
+            treeclean_out = TREECLEAN(
+                og_cds_fasta_ch,
+                iqtree_nt_for_alerax_ch,
+                genomes_tsv_ch
+            )
+
+            treeclean_for_alerax_ch = treeclean_out.cleaned_for_alerax
+            treeclean_for_redip_ch  = treeclean_out.cleaned_for_redip
+
+            post_outputs_ch = post_outputs_ch.mix(treeclean_out.report)
+            post_outputs_ch = post_outputs_ch.mix(
+                treeclean_out.cleaned_dirs.map { og, dir -> dir }.collect()
+            )
+        }
+
         if (params.run_alerax) {
-            if (run_mafft_aa_branch) {
+            if (params.run_tree_cleaning && params.use_cleaned_gene_trees_for_alerax) {
+                iqtree_for_alerax_ch = treeclean_for_alerax_ch
+            } else if (run_mafft_aa_branch) {
                 iqtree_for_alerax_ch = iqtree_aa_for_alerax_ch
             } else if (run_macse_nt_branch) {
                 iqtree_for_alerax_ch = iqtree_nt_for_alerax_ch
@@ -692,6 +718,8 @@ workflow {
 
             if (redip_gene_trees_dir) {
                 iqtree_for_redip_ch = makeIqtreeDirChannelFromDir(redip_gene_trees_dir)
+            } else if (params.run_tree_cleaning && params.use_cleaned_gene_trees_for_redip) {
+                iqtree_for_redip_ch = treeclean_for_redip_ch
             } else if (run_mafft_aa_branch) {
                 iqtree_for_redip_ch = iqtree_aa_out.map { og, iqtree_dir -> tuple(og, iqtree_dir) }
             } else if (run_macse_nt_branch) {
