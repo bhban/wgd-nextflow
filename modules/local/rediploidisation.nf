@@ -340,10 +340,19 @@ workflow REDIPLOIDISATION {
         redip_params
     )
 
-    rooted_trees_ch = ROOT_GENE_TREE.out
+    rooted_ok_ch = ROOT_GENE_TREE.out
+        .filter { og, rooted_tree, summary ->
+            def data_line = summary.readLines()
+                .drop(1)
+                .find { it.trim() }
+    
+            data_line && data_line.split('\t', -1)[1] == 'ROOTED'
+        }
+    
+    rooted_trees_ch = rooted_ok_ch
         .map { og, rooted_tree, summary -> rooted_tree }
         .collect()
-
+    
     rooting_summaries_ch = ROOT_GENE_TREE.out
         .map { og, rooted_tree, summary -> summary }
         .collect()
