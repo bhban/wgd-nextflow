@@ -580,6 +580,11 @@ workflow {
 
             iqtree_nt_out = IQTREE_NT_OG(iqtree_nt_in)
 
+            iqtree_nt_ok_ch = iqtree_nt_out
+                .filter { og, iqtree_dir ->
+                    file("${iqtree_dir}/og_${og}.iqtree.status").text.trim() == 'OK'
+                }
+
             iqtree_nt_dirs_ch = iqtree_nt_out
                 .map { og, iqtree_dir -> iqtree_dir }
                 .collect()
@@ -589,7 +594,7 @@ workflow {
             post_outputs_ch = post_outputs_ch.mix(iqtree_nt_dirs_ch)
             post_outputs_ch = post_outputs_ch.mix(iqtree_nt_report_out)
 
-            iqtree_nt_for_alerax_ch = iqtree_nt_out
+            iqtree_nt_for_alerax_ch = iqtree_nt_ok_ch
                 .join(
                     macse_out
                         .filter { og, aa, nt, status, log ->
@@ -622,6 +627,11 @@ workflow {
 
             iqtree_aa_out = IQTREE_AA_OG(iqtree_aa_in)
 
+            iqtree_aa_ok_ch = iqtree_aa_out
+                .filter { og, iqtree_dir ->
+                    file("${iqtree_dir}/og_${og}.iqtree.status").text.trim() == 'OK'
+                }
+
             iqtree_aa_dirs_ch = iqtree_aa_out
                 .map { og, iqtree_dir -> iqtree_dir }
                 .collect()
@@ -631,7 +641,7 @@ workflow {
             post_outputs_ch = post_outputs_ch.mix(iqtree_aa_dirs_ch)
             post_outputs_ch = post_outputs_ch.mix(iqtree_aa_report_out)
 
-            iqtree_aa_for_alerax_ch = iqtree_aa_out
+            iqtree_aa_for_alerax_ch = iqtree_aa_ok_ch
                 .join(
                     mafft_out
                         .filter { og, aa, status, log ->
@@ -693,9 +703,13 @@ workflow {
             if (redip_gene_trees_dir) {
                 iqtree_for_redip_ch = makeIqtreeDirChannelFromDir(redip_gene_trees_dir)
             } else if (run_mafft_aa_branch) {
-                iqtree_for_redip_ch = iqtree_aa_out.map { og, iqtree_dir -> tuple(og, iqtree_dir) }
+                iqtree_for_redip_ch = iqtree_aa_ok_ch.map { og, iqtree_dir ->
+                    tuple(og, iqtree_dir)
+                }
             } else if (run_macse_nt_branch) {
-                iqtree_for_redip_ch = iqtree_nt_out.map { og, iqtree_dir -> tuple(og, iqtree_dir) }
+                iqtree_for_redip_ch = iqtree_nt_ok_ch.map { og, iqtree_dir ->
+                    tuple(og, iqtree_dir)
+                }
             } else {
                 error "No IQ-TREE results are available for rediploidisation"
             }
@@ -747,7 +761,7 @@ output {
     }
 
     genespace_wd {
-        path { wd -> wd >> "${params.working_dir}/" }
+        path '.'
     }
 
     post_genespace {
