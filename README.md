@@ -8,10 +8,60 @@ The pipeline integrates:
 - Genome preprocessing and annotation parsing
 - OrthoFinder
 - GENESPACE
-- MACSE
+- Alternative alignment branches:
+  - MACSE coding-sequence alignment followed by nucleotide gene-tree inference
+  - MAFFT amino-acid alignment followed by amino-acid gene-tree inference
 - IQ-TREE
 - AleRax
 - Rediploidisation classification and Circos visualisation
+
+---
+
+## Table of contents
+
+- [Overview](#overview)
+- [Requirements](#requirements)
+- [Optional: pre-pull containers](#optional-pre-pull-containers)
+- [Input files](#input-files)
+  - [1. `genomes.tsv`](#1-genomestsv)
+  - [2. Genome annotation and sequence files](#2-genome-annotation-and-sequence-files)
+  - [3. Genome FASTA files for ANNEVO](#3-genome-fasta-files-for-annevo)
+  - [4. Chromosome dictionary / chromosome-length files](#4-chromosome-dictionary--chromosome-length-files)
+  - [5. Species tree](#5-species-tree)
+- [Running the pipeline](#running-the-pipeline)
+- [Start modes](#start-modes)
+  - [`full`](#full)
+  - [`parsed`](#parsed)
+  - [`genespace`](#genespace)
+  - [`alerax`](#alerax)
+  - [`redip`](#redip)
+- [Alignment and gene-tree branches](#alignment-and-gene-tree-branches)
+  - [MACSE nucleotide branch](#macse-nucleotide-branch)
+  - [MAFFT amino-acid branch](#mafft-amino-acid-branch)
+- [Example parameter file](#example-parameter-file)
+- [Optional ANNEVO annotation](#optional-annevo-annotation)
+- [AleRax](#alerax-1)
+- [Rediploidisation analysis](#rediploidisation-analysis)
+  - [Position sources](#position-sources)
+  - [Gene-tree rooting and classification](#gene-tree-rooting-and-classification)
+  - [Gene tree input](#gene-tree-input)
+- [Modular execution](#modular-execution)
+- [Outputs](#outputs)
+  - [GENESPACE output](#genespace-output)
+  - [Post-processing output](#post-processing-output)
+  - [AleRax output](#alerax-output)
+  - [Rediploidisation output](#rediploidisation-output)
+- [Common issues](#common-issues)
+  - [`species_tree` is missing](#species_tree-is-missing)
+  - [OrthoFinder error: species tree is not rooted](#orthofinder-error-species-tree-is-not-rooted)
+  - [GENESPACE reruns OrthoFinder unexpectedly](#genespace-reruns-orthofinder-unexpectedly)
+  - [Missing input files](#missing-input-files)
+  - [MAFFT rejects uncommon amino-acid symbols](#mafft-rejects-uncommon-amino-acid-symbols)
+  - [Rediploidisation-only mode requires IQ-TREE directories](#rediploidisation-only-mode-requires-iq-tree-directories)
+  - [Rediploidisation positions are missing](#rediploidisation-positions-are-missing)
+  - [Rediploidisation produces zero classifications unexpectedly](#rediploidisation-produces-zero-classifications-unexpectedly)
+- [Typical workflows](#typical-workflows)
+- [Citation](#citation)
 
 ---
 
@@ -26,13 +76,15 @@ This pipeline can perform:
 5. Synteny-aware orthogroup construction with GENESPACE
 6. Orthogroup filtering
 7. Optional tandem duplicate collapse
-8. Per-orthogroup coding sequence alignment with MACSE
-9. Gene tree inference with IQ-TREE
+8. Orthogroup FASTA writing for both coding sequences and proteins
+9. One or both downstream alignment/tree-building branches:
+   - coding-sequence alignment with MACSE followed by nucleotide IQ-TREE analyses
+   - amino-acid alignment with MAFFT followed by amino-acid IQ-TREE analyses
 10. Optional gene tree - species tree reconciliation with AleRax
 11. Optional rediploidisation event classification
 12. Optional Circos link and plot generation for rediploidisation results
 
-The pipeline supports several entry points, so users can run the full workflow from raw inputs or restart from existing GENESPACE or gene-tree outputs.
+The pipeline supports several entry points, so users can run the full workflow from raw inputs or restart from existing GENESPACE, IQ-TREE, or AleRax inputs.
 
 ---
 
@@ -66,6 +118,7 @@ For example, the pipeline will look for local SIFs matching patterns such as:
 ```text
 apptainer/genespace_*.sif
 apptainer/macse_*.sif
+apptainer/mafft_*.sif
 apptainer/iqtree_*.sif
 apptainer/alerax_*.sif
 apptainer/annevo_*.sif
@@ -81,7 +134,7 @@ apptainer/redip_*.sif
 A tab-separated file with required columns:
 
 ```text
-genome_id    genome_source    ploidy    outgroup  rediploidisation
+genome_id    genome_source    ploidy
 ```
 
 Required columns:
@@ -90,25 +143,27 @@ Required columns:
 - `genome_source`: one of `ncbi`, `ensembl`, `phytozome`, or `helixer`
 - `ploidy`: integer, for example `2`
 
-Optional column:
+Optional columns used by downstream analyses:
 
-- `outgroup`: `yes` or `no`; defaults to `no` if absent; can also provide tiered outgroups, specified by integers, with 1 being the most basal outgroup
-- `rediploidisation`: `yes` or `no`
+- `outgroup`: may be boolean-like (`yes`, `no`, `true`, `false`) or integer-tiered; lower positive integers are treated as more basal outgroup tiers during rediploidisation rooting
+- `redip`: marks species included as focal rediploidisation/WGD ingroup species
 
 Example:
 
 ```text
-genome_id	genome_source	ploidy	outgroup rediploidisation
-Eric_Calluna_vul	ensembl 2 no  yes
-Sarr_Sarracenia_pur	ncbi	2	no  yes
-Eben_Diospyros_lotus  ncbi  2 no  yes
-Cornales_Cornus_flo	ncbi	2	no  no
-Gunnerales_Myrothamnus_fla  phytozome 1 yes no
+genome_id	genome_source	ploidy	outgroup	redip
+Eric_Calluna_vul	ensembl	2	0	1
+Sarr_Sarracenia_pur	ncbi	2	0	1
+Eben_Diospyros_lot	ncbi	2	0	1
+Cornales_Cornus_flo	ncbi	2	1	0
+Gunnerales_Myrothamnus_fla	phytozome	1	2	0
 ```
 
-Providing an outgroup column allows you to require an outgroup gene copy in your gene families when filtering post-GENESPACE. Outgroup information is also used for rooting gene trees prior to rediploidisation analysis. The outgroup column is in regard to phylogenetic outgroup, not the WGD. Only species within the most basal clade should have `yes` for `outgroup`
+Providing an `outgroup` column allows the post-GENESPACE filter to require an outgroup gene copy when `require_outgroup_og: true`. Outgroup information is also used for rooting gene trees prior to rediploidisation analysis.
 
-Providing a rediploidisation column is required when running the rediploidisation subworkflow. Each species with `yes` in the rediploidisation column will be treated as an in-group to the WGD and will be treated as a focal species in the rediploidisation analysis.
+When integer outgroup tiers are used, the lowest tier present in a gene tree is tried first during rooting. This allows a more basal outgroup to be preferred over a secondary outgroup when both are available.
+
+Providing a `redip` column is required when running the rediploidisation subworkflow. Each species marked as rediploidisation-positive is treated as part of the WGD ingroup and as a focal species for classification.
 
 ---
 
@@ -144,7 +199,7 @@ annotation:
   tool: "annevo"
 ```
 
-When ANNEVO is enabled, the pipeline searches for genome FASTA files in `fasta`.
+When ANNEVO is enabled, the pipeline searches for genome FASTA files in `fasta_dir`.
 
 Supported FASTA extensions include:
 
@@ -166,7 +221,7 @@ fasta/Sarr_Sarracenia_pur.fa.gz
 
 ---
 
-### 4. Chromosome dictionary
+### 4. Chromosome dictionary / chromosome-length files
 
 For each genome, provide either:
 
@@ -180,7 +235,9 @@ or:
 chr_dict/<genome_id>_chr_lengths.bed
 ```
 
-These files are used to standardise or simplify chromosome names for downstream analyses and plotting. If running rediploidisation analysis, Style B is required, as chromosome lengths are used to build circos plots. 
+These files are used to standardise or simplify chromosome names for downstream analyses and plotting.
+
+If running rediploidisation analysis, chromosome-length BED files are required for focal redip species because they are used to prepare Circos plots.
 
 #### Style A: two-column mapping
 
@@ -190,7 +247,7 @@ NC_001234.1	chr1
 NC_001235.1	chr2
 ```
 
-#### Style B: BED-like chromosome length file
+#### Style B: BED-like chromosome-length file
 
 ```text
 #chrom	chromStart	chromEnd	name
@@ -204,6 +261,8 @@ For this style, the mapping is interpreted as:
 old_seqid = column 4
 new_seqid = column 1
 ```
+
+When building chromosome-length BED files from NCBI assembly reports, the sequence identifier in column 4 must match the identifiers used in the GFF. For RefSeq-derived annotations this will usually be the RefSeq accession, for example `NC_...`, rather than the GenBank chromosome accession, for example `CM...`.
 
 ---
 
@@ -270,14 +329,15 @@ cropdiversity
 
 ## Start modes
 
-The pipeline supports four start modes:
+The pipeline supports five start modes:
 
 | Mode | Description |
 |---|---|
 | `full` | Run the full pipeline from genome inputs |
 | `parsed` | Start from parsed GENESPACE inputs |
 | `genespace` | Start from a completed GENESPACE working directory |
-| `redip` | Run only the rediploidisation workflow from existing gene trees and position data |
+| `alerax` | Run only the AleRax workflow from existing IQ-TREE and alignment outputs |
+| `redip` | Run only the rediploidisation workflow from existing IQ-TREE outputs and position data |
 
 ---
 
@@ -321,15 +381,42 @@ start_mode: "genespace"
 existing_genespace_wd: "path/to/workingDir"
 ```
 
-The pipeline validates that the directory contains:
+The pipeline validates that the directory contains completed GENESPACE output and then reruns downstream analyses only.
 
-```text
-results/
-results/combBed.txt
-pangenes/
+This is useful for rerunning alignment, tree-building, AleRax, or rediploidisation analyses without rerunning GENESPACE.
+
+---
+
+### `alerax`
+
+Runs only the AleRax workflow from existing IQ-TREE gene trees and matching nucleotide alignments.
+
+Requires:
+
+```yaml
+start_mode: "alerax"
+run_alerax: true
 ```
 
-This is useful for rerunning downstream analyses without rerunning GENESPACE.
+If `use_species_tree_for_alerax: true`, also provide:
+
+```yaml
+species_tree: "path/to/species_tree.nwk"
+```
+
+Existing inputs are specified under `alerax`:
+
+```yaml
+alerax:
+  gene_trees_dir: "path/to/iqtree_nt"
+  nt_alignments_dir: "path/to/macse"
+```
+
+The `gene_trees_dir` should contain IQ-TREE directories named like:
+
+```text
+og_<orthogroup>/og_<orthogroup>_iqtree.treefile
+```
 
 ---
 
@@ -345,14 +432,23 @@ run_rediploidisation: true
 species_tree: "path/to/species_tree.nwk"
 ```
 
-Also requires existing gene trees:
+Also requires existing IQ-TREE outputs:
 
 ```yaml
 rediploidisation:
-  gene_trees_dir: "path/to/iqtree_dir"
+  gene_trees_dir: "path/to/iqtree_aa_or_iqtree_nt"
 ```
 
-If positions are taken from GENESPACE or BED-like GENESPACE-derived files, provide:
+The `gene_trees_dir` should contain directories named like:
+
+```text
+og_<orthogroup>/og_<orthogroup>_iqtree.treefile
+og_<orthogroup>/og_<orthogroup>.iqtree.status
+```
+
+Only IQ-TREE directories with status `OK` are passed into the rediploidisation workflow.
+
+If positions are taken from GENESPACE-derived BED files, provide:
 
 ```yaml
 rediploidisation:
@@ -366,6 +462,68 @@ rediploidisation:
   positions_source: "positions"
   positions: "path/to/positions.tsv"
 ```
+
+---
+
+## Alignment and gene-tree branches
+
+The pipeline can run one or both downstream alignment/tree-building branches. Select the branch with:
+
+```yaml
+alignment_method: "macse_nt"
+```
+
+Allowed values are:
+
+| Value | Alignment branch run | Gene trees inferred from |
+|---|---|---|
+| `macse_nt` | MACSE only | nucleotide alignments |
+| `mafft_aa` | MAFFT only | amino-acid alignments |
+| `both` | MACSE and MAFFT | both nucleotide and amino-acid alignments |
+
+No unnecessary alignment branch is run unless it is explicitly requested.
+
+Relevant parameters include:
+
+```yaml
+alignment_method: "macse_nt"
+mafft_bin: "mafft"
+mafft_opts: "--auto --amino"
+iqtree_nt_model: "MFP"
+iqtree_aa_model: "MFP"
+```
+
+### MACSE nucleotide branch
+
+The MACSE branch:
+
+1. takes per-orthogroup CDS FASTAs
+2. writes amino-acid and nucleotide MACSE alignments
+3. infers nucleotide gene trees with IQ-TREE
+
+Outputs are written under:
+
+```text
+post_genespace/macse/
+post_genespace/iqtree_nt/
+```
+
+### MAFFT amino-acid branch
+
+The MAFFT branch:
+
+1. takes per-orthogroup protein FASTAs
+2. writes amino-acid MAFFT alignments
+3. infers amino-acid gene trees with IQ-TREE
+
+Outputs are written under:
+
+```text
+post_genespace/mafft_aa/
+post_genespace/iqtree_aa/
+```
+
+When both branches are run, AleRax and rediploidisation currently prefer the amino-acid IQ-TREE branch unless an explicit tree directory is supplied in the relevant parameters.
 
 ---
 
@@ -396,6 +554,12 @@ use_species_tree_for_alerax: true
 require_outgroup_og: true
 collapse_tandems: true
 
+alignment_method: "macse_nt"
+mafft_bin: "mafft"
+mafft_opts: "--auto --amino"
+iqtree_nt_model: "MFP"
+iqtree_aa_model: "MFP"
+
 run_alerax: true
 run_rediploidisation: false
 ```
@@ -404,9 +568,9 @@ run_rediploidisation: false
 
 ## Optional ANNEVO annotation
 
-ANNEVO can be run before the standard preprocessing steps. ANNEVO is disabled by default. 
+ANNEVO can be run before the standard preprocessing steps. ANNEVO is disabled by default.
 
-ANNEVO is resource heavy and requires at least 1 GPU. 
+ANNEVO is resource heavy and may require GPU access depending on the selected profile and configuration.
 
 Enable ANNEVO:
 
@@ -436,7 +600,7 @@ If ANNEVO is disabled, the pipeline uses the provided GFF, protein, and CDS file
 
 ## AleRax
 
-AleRax is optional, and disabled by default.
+AleRax is optional and disabled by default.
 
 Enable AleRax:
 
@@ -491,6 +655,7 @@ Notes:
 - Each model runs independently.
 - Outputs are separated by `model_id`.
 - `cleanup_output: true` removes large intermediate AleRax output directories that are not usually needed for downstream interpretation.
+- In a standard full or downstream run, AleRax uses the amino-acid IQ-TREE branch when `alignment_method: "mafft_aa"` or `alignment_method: "both"`; otherwise it uses the nucleotide IQ-TREE branch.
 
 ---
 
@@ -560,14 +725,26 @@ position_end_column: "end"
 position_species_column: "genome"
 ```
 
+### Gene-tree rooting and classification
+
+Rediploidisation gene trees are rooted using outgroup information from `genomes.tsv`.
+
+- If a single outgroup tip from the most basal available tier is present, the tree is rooted on that tip.
+- If multiple outgroup tips from the most basal available tier are present and form a clade, the tree is rooted on their MRCA.
+- If the MRCA of the chosen outgroup tier is already the entire tree, the tree is recorded as `SKIPPED` rather than rewritten unchanged.
+- Only trees successfully recorded as `ROOTED` are passed into classification.
+
+The rooting report includes all attempted trees, including both `ROOTED` and `SKIPPED` cases.
+
 ### Gene tree input
 
-When running rediploidisation as part of the full pipeline, IQ-TREE outputs are passed directly into the rediploidisation workflow.
+When running rediploidisation as part of the full pipeline, only IQ-TREE directories with internal IQ-TREE status `OK` are passed into the rediploidisation workflow.
 
 When running `start_mode: "redip"`, provide a directory containing IQ-TREE outputs named like:
 
 ```text
-og_<orthogroup>_iqtree.treefile
+og_<orthogroup>/og_<orthogroup>_iqtree.treefile
+og_<orthogroup>/og_<orthogroup>.iqtree.status
 ```
 
 Example:
@@ -577,9 +754,11 @@ start_mode: "redip"
 run_rediploidisation: true
 
 rediploidisation:
-  gene_trees_dir: "path/to/iqtree"
+  gene_trees_dir: "path/to/iqtree_aa"
   genespace_wd: "path/to/workingDir"
 ```
+
+Only directories whose `og_<orthogroup>.iqtree.status` file contains `OK` are used.
 
 ---
 
@@ -590,11 +769,13 @@ rediploidisation:
 | `full` | Raw genome annotations and sequences | Complete analysis |
 | `parsed` | Parsed GENESPACE input directory | Restart after parsing |
 | `genespace` | Completed GENESPACE working directory | Rerun downstream analyses |
-| `redip` | Existing gene trees, species tree, and positions | Rediploidisation-only analyses |
+| `alerax` | Existing IQ-TREE directories and nucleotide alignments | AleRax-only analyses |
+| `redip` | Existing IQ-TREE directories, species tree, and positions | Rediploidisation-only analyses |
 
 This allows users to:
 
 - Avoid rerunning expensive upstream steps
+- Test different alignment and tree-building strategies
 - Test different AleRax model configurations
 - Run rediploidisation on existing IQ-TREE outputs
 - Reuse completed GENESPACE analyses
@@ -641,13 +822,59 @@ Typical contents include:
 
 ```text
 post_genespace/
-  iqtree/
-  macse/
-  pangenes_PASS.tsv
-  og_list_min4species.txt
+  pangenes/
+    pangenes_PASS.tsv
+    og_list_min4species.txt
+    pangenes_PASS.collapsed.tsv
+    og_list_min4species.collapsed.txt
+  tandem_collapse/
+    tandem_report.tsv
   og_fasta/
-  macse_report.tsv
-  iqtree_report.tsv
+    og_fastas.done
+    write_og_fastas.log
+  og_fasta_cds/
+    og_<orthogroup>.fasta
+  og_fasta_aa/
+    og_<orthogroup>.fasta
+```
+
+If the MACSE nucleotide branch is run:
+
+```text
+post_genespace/
+  macse/
+    og_<orthogroup>_AA.fasta
+    og_<orthogroup>_NT.fasta
+    og_<orthogroup>.status
+    og_<orthogroup>.log
+    macse_report.tsv
+    macse_ok_og_list.txt
+  iqtree_nt/
+    og_<orthogroup>/
+      og_<orthogroup>_iqtree.treefile
+      og_<orthogroup>_iqtree.ufboot
+      og_<orthogroup>.iqtree.status
+    iqtree_nt_report.tsv
+    iqtree_nt_ok_og_list.txt
+```
+
+If the MAFFT amino-acid branch is run:
+
+```text
+post_genespace/
+  mafft_aa/
+    og_<orthogroup>_AA.fasta
+    og_<orthogroup>.status
+    og_<orthogroup>.log
+    mafft_report.tsv
+    mafft_ok_og_list.txt
+  iqtree_aa/
+    og_<orthogroup>/
+      og_<orthogroup>_iqtree.treefile
+      og_<orthogroup>_iqtree.ufboot
+      og_<orthogroup>.iqtree.status
+    iqtree_aa_report.tsv
+    iqtree_aa_ok_og_list.txt
 ```
 
 ---
@@ -692,14 +919,19 @@ Typical outputs include:
 post_genespace/
   rediploidisation/
     rooted_trees/
+    rooting_summaries/
     branch_definitions/
     classifications/
     circos_links/
+    circos_inputs/
     circos_plots/
-    rediploidisation_report.tsv
+    report/
+      rooting_summary.tsv
+      classification_summary.tsv
+      circos_links_summary.tsv
 ```
 
-Exact file names may vary depending on the number of focal species, gene trees, and plotting configuration.
+`rooted_trees/` contains only trees that were successfully rooted. `rooting_summaries/` records all attempted trees, including skipped cases.
 
 ---
 
@@ -761,6 +993,12 @@ cds_dir/Eric_Calluna_vul.cds
 chr_dict_dir/Eric_Calluna_vul.tsv
 ```
 
+or, for a chromosome-length BED file:
+
+```text
+chr_dict_dir/Eric_Calluna_vul_chr_lengths.bed
+```
+
 If ANNEVO is enabled, the pipeline also expects a genome FASTA such as:
 
 ```text
@@ -775,7 +1013,15 @@ fasta_dir/Eric_Calluna_vul.fa.gz
 
 ---
 
-### Rediploidisation-only mode requires gene trees
+### MAFFT rejects uncommon amino-acid symbols
+
+Some protein FASTAs may contain symbols that MAFFT does not accept under the default amino-acid alphabet, for example `U`.
+
+If this occurs, either clean or standardise the protein FASTAs before alignment, or adjust the MAFFT options deliberately if unusual symbols should be retained.
+
+---
+
+### Rediploidisation-only mode requires IQ-TREE directories
 
 When using:
 
@@ -790,14 +1036,17 @@ run_rediploidisation: true
 species_tree: "path/to/species_tree.nwk"
 
 rediploidisation:
-  gene_trees_dir: "path/to/iqtree"
+  gene_trees_dir: "path/to/iqtree_aa_or_iqtree_nt"
 ```
 
-The gene tree directory should contain files named like:
+The tree directory should contain IQ-TREE output directories named like:
 
 ```text
-og_<orthogroup>_iqtree.treefile
+og_<orthogroup>/og_<orthogroup>_iqtree.treefile
+og_<orthogroup>/og_<orthogroup>.iqtree.status
 ```
+
+Only IQ-TREE outputs with status `OK` are used.
 
 ---
 
@@ -828,14 +1077,48 @@ This is required in `start_mode: "redip"` unless `positions_source` is set to `p
 
 ---
 
+### Rediploidisation produces zero classifications unexpectedly
+
+Check that:
+
+1. rooted trees were successfully produced and passed into classification
+2. tree-tip labels match the configured `tip_separator` and `label_format`
+3. chromosome identifiers in tree tips match the chromosome identifiers in the positional inputs used downstream
+4. the chosen `copy_mode` and `required_copies` match the biological pattern you want to detect
+
+---
+
 ## Typical workflows
 
-### Full WGD and gene family evolution analysis
+### Full WGD and gene family evolution analysis using nucleotide trees
 
 ```yaml
 start_mode: "full"
+alignment_method: "macse_nt"
 run_alerax: true
 run_rediploidisation: false
+```
+
+---
+
+### Full run using amino-acid trees for deeply diverged groups
+
+```yaml
+start_mode: "full"
+alignment_method: "mafft_aa"
+run_alerax: true
+run_rediploidisation: true
+```
+
+---
+
+### Full run with both alignment/tree-building branches
+
+```yaml
+start_mode: "full"
+alignment_method: "both"
+run_alerax: true
+run_rediploidisation: true
 ```
 
 ---
@@ -861,8 +1144,23 @@ annevo:
 start_mode: "genespace"
 existing_genespace_wd: "path/to/workingDir"
 
+alignment_method: "mafft_aa"
 run_alerax: true
 run_rediploidisation: true
+```
+
+---
+
+### AleRax-only analysis
+
+```yaml
+start_mode: "alerax"
+run_alerax: true
+species_tree: "path/to/species_tree.nwk"
+
+alerax:
+  gene_trees_dir: "path/to/iqtree_nt"
+  nt_alignments_dir: "path/to/macse"
 ```
 
 ---
@@ -873,9 +1171,10 @@ run_rediploidisation: true
 start_mode: "redip"
 run_rediploidisation: true
 species_tree: "path/to/species_tree.nwk"
+chr_dict_dir: "path/to/chr_dict"
 
 rediploidisation:
-  gene_trees_dir: "path/to/iqtree"
+  gene_trees_dir: "path/to/iqtree_aa"
   genespace_wd: "path/to/workingDir"
 ```
 
@@ -888,8 +1187,10 @@ Please cite the tools used in your analysis, including:
 - Nextflow
 - GENESPACE
 - OrthoFinder
-- MACSE
+- MACSE, if the nucleotide alignment branch was run
+- MAFFT, if the amino-acid alignment branch was run
 - IQ-TREE
-- AleRax
+- AleRax, if reconciliation was run
 - ANNEVO, if annotation was run
 - Circos, if rediploidisation plots were generated
+
