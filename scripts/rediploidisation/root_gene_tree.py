@@ -368,9 +368,17 @@ def main() -> None:
             tip_separator=args.tip_separator,
         )
 
-        tree.write(outfile=args.output_tree, format=args.tree_format)
+        if rooted:
+            tree.write(outfile=args.output_tree, format=args.tree_format)
+            status = "ROOTED"
+        else:
+            # Do not write an unchanged tree for skipped cases.
+            # This keeps rooted_trees/ restricted to trees that were actually rooted.
+            output_tree = Path(args.output_tree)
+            if output_tree.exists():
+                output_tree.unlink()
+            status = "SKIPPED"
 
-        status = "ROOTED" if rooted else "SKIPPED"
         write_summary(args.summary_tsv, tree_id, status, message)
 
     except Exception as exc:
