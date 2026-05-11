@@ -310,7 +310,10 @@ workflow {
         )
 
         post_outputs_ch = post_outputs_ch.mix(
-            redip_out.rooted_trees.flatMap { og, tree, summary -> [tree, summary] }.collect()
+            redip_out.rooted_trees.map { og, tree -> tree }.collect()
+        )
+        post_outputs_ch = post_outputs_ch.mix(
+            redip_out.rooting_summaries.map { og, summary -> summary }.collect()
         )
         post_outputs_ch = post_outputs_ch.mix(redip_out.branch_definitions)
         post_outputs_ch = post_outputs_ch.mix(
@@ -727,7 +730,10 @@ workflow {
             )
 
             post_outputs_ch = post_outputs_ch.mix(
-                redip_out.rooted_trees.flatMap { og, tree, summary -> [tree, summary] }.collect()
+                redip_out.rooted_trees.map { og, tree -> tree }.collect()
+            )
+            post_outputs_ch = post_outputs_ch.mix(
+                redip_out.rooting_summaries.map { og, summary -> summary }.collect()
             )
             post_outputs_ch = post_outputs_ch.mix(redip_out.branch_definitions)
             post_outputs_ch = post_outputs_ch.mix(
