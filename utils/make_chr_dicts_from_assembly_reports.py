@@ -175,7 +175,7 @@ def main():
     try:
         for genome_id, url in read_manifest(args.manifest):
             report_path = reports_dir / f"{genome_id}_assembly_report.txt"
-            output_path = outdir / f"{genome_id}.tsv"
+            output_path = outdir / f"{genome_id}_chr_lengths.bed"
 
             print(f"Downloading assembly report for {genome_id}", file=sys.stderr)
 
