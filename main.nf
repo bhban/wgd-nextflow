@@ -127,7 +127,16 @@ def makeIqtreeDirChannelFromDir(treeDir) {
             }
 
             def og = m[0][1]
-            tuple(og, treefile.parent)
+            def iqtree_dir = treefile.parent
+            def status_file = file("${iqtree_dir}/og_${og}.iqtree.status", checkIfExists: true)
+
+            tuple(og, iqtree_dir, status_file)
+        }
+        .filter { og, iqtree_dir, status_file ->
+            status_file.text.trim() == 'OK'
+        }
+        .map { og, iqtree_dir, status_file ->
+            tuple(og, iqtree_dir)
         }
 }
 
