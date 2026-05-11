@@ -23,7 +23,7 @@ start_mode: 'redip'
 
 rediploidisation:
   gene_trees_dir: "/exports/eddie/scratch/s2428892/nf-teleostei/results/post_genespace/iqtree_aa"
-  genespace_wd: "/exports/eddie/scratch/s2428892/nf-teleostei/results/validated_genespace_wd"
+  genespace_wd: "/exports/eddie/scratch/s2428892/nf-teleostei/results/workingDir"
 
 
 annotation:
