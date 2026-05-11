@@ -59,10 +59,11 @@ def make_chr_dict(report_path, output_path, chrom_prefix="chr"):
             assigned_molecule = fields[2]
             assigned_type = fields[3]
             genbank_accn = fields[4]
+            refseq_accn = fields[6]
             assembly_unit = fields[7]
             sequence_length = fields[8]
 
-            if genbank_accn.lower() == "na":
+            if genbank_accn.lower() == "na" and refseq_accn.lower() == "na":
                 continue
 
             try:
@@ -70,14 +71,22 @@ def make_chr_dict(report_path, output_path, chrom_prefix="chr"):
             except ValueError:
                 continue
 
-            old_seqid = genbank_accn
+            # Use the RefSeq accession when available, because RefSeq GFFs use
+            # RefSeq sequence IDs such as NC_064543.1 rather than GenBank IDs
+            # such as CM043645.1. Fall back to GenBank when no RefSeq accession
+            # is present.
+            old_seqid = (
+                refseq_accn
+                if refseq_accn.lower() != "na"
+                else genbank_accn
+            )
 
             if is_chromosome_row(sequence_role, assigned_type, assembly_unit):
                 new_seqid = clean_chrom_name(assigned_molecule, prefix=chrom_prefix)
                 if new_seqid is None:
-                    new_seqid = genbank_accn
+                    new_seqid = old_seqid
             else:
-                new_seqid = genbank_accn
+                new_seqid = old_seqid
 
             out.write(f"{new_seqid}\t0\t{chrom_end}\t{old_seqid}\n")
             rows_written += 1
