@@ -46,7 +46,12 @@ process ROOT_GENE_TREE {
     output:
     tuple val(og),
           path("rediploidisation/rooted_trees/og_${og}.rooted.treefile"),
-          path("rediploidisation/rooting_summaries/og_${og}.rooting_summary.tsv")
+          optional: true,
+          emit: rooted_trees
+
+    tuple val(og),
+          path("rediploidisation/rooting_summaries/og_${og}.rooting_summary.tsv"),
+          emit: summaries
 
     script:
     """
@@ -340,21 +345,12 @@ workflow REDIPLOIDISATION {
         redip_params
     )
 
-    rooted_ok_ch = ROOT_GENE_TREE.out
-        .filter { og, rooted_tree, summary ->
-            def data_line = summary.readLines()
-                .drop(1)
-                .find { it.trim() }
-    
-            data_line && data_line.split('\t', -1)[1] == 'ROOTED'
-        }
-    
-    rooted_trees_ch = rooted_ok_ch
-        .map { og, rooted_tree, summary -> rooted_tree }
+    rooted_trees_ch = ROOT_GENE_TREE.out.rooted_trees
+        .map { og, rooted_tree -> rooted_tree }
         .collect()
-    
-    rooting_summaries_ch = ROOT_GENE_TREE.out
-        .map { og, rooted_tree, summary -> summary }
+
+    rooting_summaries_ch = ROOT_GENE_TREE.out.summaries
+        .map { og, summary -> summary }
         .collect()
 
     WRITE_BRANCH_DEFS(
@@ -423,7 +419,8 @@ workflow REDIPLOIDISATION {
 
     emit:
     redip_species = EXTRACT_REDIP_SPECIES.out
-    rooted_trees = ROOT_GENE_TREE.out
+    rooted_trees = ROOT_GENE_TREE.out.rooted_trees
+    rooting_summaries = ROOT_GENE_TREE.out.summaries
     branch_definitions = WRITE_BRANCH_DEFS.out
     classifications = CLASSIFY_REDIP_EVENTS.out
     circos_links = MAKE_REDIP_LINKS.out
