@@ -257,27 +257,32 @@ process RUN_TREESHRINK_DECOMPOSED {
     path "treeshrink.log", emit: log
 
     script:
-    def protected_arg = params.treeshrink_protect_outgroups ? "-x \$(paste -sd, ${protected_species})" : ""
-
     """
     set -euo pipefail
 
     mkdir -p treeshrink_out
 
-    run_treeshrink.py \
-      -t "${trees}" \
-      -m ${params.treeshrink_mode} \
-      -q ${params.treeshrink_alpha} \
-      ${protected_arg} \
-      -o treeshrink_out \
-      -O treeshrink \
-      > treeshrink.log 2>&1
+    echo "TreeShrink mode: ${params.treeshrink_mode}" > treeshrink.log
+    echo "TreeShrink alpha: ${params.treeshrink_alpha}" >> treeshrink.log
+    echo "Tree count: \$(grep -c . ${trees})" >> treeshrink.log
+    echo "Protected species will be handled during pruning, not by TreeShrink -x." >> treeshrink.log
+    echo "Protected species:" >> treeshrink.log
+    cat "${protected_species}" >> treeshrink.log || true
+    echo "" >> treeshrink.log
 
-    python3 ${parse_treeshrink_removals_script} \
-      --treeshrink-dir treeshrink_out \
-      --prefix treeshrink \
-      --alpha ${params.treeshrink_alpha} \
-      --tree-order "${tree_order}" \
+    run_treeshrink.py \\
+      -t "${trees}" \\
+      -m ${params.treeshrink_mode} \\
+      -q ${params.treeshrink_alpha} \\
+      -o treeshrink_out \\
+      -O treeshrink \\
+      >> treeshrink.log 2>&1
+
+    python3 ${parse_treeshrink_removals_script} \\
+      --treeshrink-dir treeshrink_out \\
+      --prefix treeshrink \\
+      --alpha ${params.treeshrink_alpha} \\
+      --tree-order "${tree_order}" \\
       --out treeshrink.removals.tsv
     """
 }
@@ -289,6 +294,7 @@ process WRITE_TREESHRINK_PRUNED_FASTAS {
     input:
     path decomposed_fastas
     path removals
+    path genomes_tsv
     path prune_fastas_script
 
     output:
@@ -297,16 +303,22 @@ process WRITE_TREESHRINK_PRUNED_FASTAS {
     path "treeshrink_pruning_report.tsv", emit: report
 
     script:
+    def protect_outgroups_arg = params.treeshrink_protect_outgroups ? "--protect-outgroups" : ""
+
     """
     set -euo pipefail
 
     mkdir -p pruned_fasta
 
-    python3 ${prune_fastas_script} \
-      --fastas ${decomposed_fastas} \
-      --removals "${removals}" \
-      --out-dir pruned_fasta \
-      --out-membership post_treeshrink_membership.tsv \
+    python3 ${prune_fastas_script} \\
+      --fastas ${decomposed_fastas} \\
+      --removals "${removals}" \\
+      --genomes-tsv "${genomes_tsv}" \\
+      --tip-separator "${params.treeclean_tip_separator}" \\
+      --tip-label-format "${params.treeclean_tip_label_format}" \\
+      ${protect_outgroups_arg} \\
+      --out-dir pruned_fasta \\
+      --out-membership post_treeshrink_membership.tsv \\
       --out-report treeshrink_pruning_report.tsv
     """
 }
@@ -608,6 +620,7 @@ workflow TREECLEAN {
     WRITE_TREESHRINK_PRUNED_FASTAS(
         ch_all_candidate_fastas,
         RUN_TREESHRINK_DECOMPOSED.out.removals,
+        genomes_tsv,
         prune_fastas_script_ch
     )
 
