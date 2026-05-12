@@ -19,8 +19,8 @@
  * ch_og_raw_fasta:
  *   tuple val(og), path(raw_cds_fasta)
  *
- * ch_og_iqtree_for_alerax:
- *   tuple val(og), path(iqtree_dir), path(nt_alignment)
+ * ch_og_iqtree_dir:
+ *   tuple val(og), path(iqtree_dir)
  *
  * genomes_tsv:
  *   path genomes.tsv
@@ -45,7 +45,7 @@ process DECOMPOSE_LONG_BRANCH_TREES {
     tag { og }
 
     input:
-    tuple val(og), path(raw_fasta), path(iqtree_dir), path(nt_alignment)
+    tuple val(og), path(raw_fasta), path(iqtree_dir)
 
     output:
     tuple val(og),
@@ -503,26 +503,26 @@ process TREE_CLEANING_REPORT {
 workflow TREECLEAN {
     take:
     ch_og_raw_fasta
-    ch_og_iqtree_for_alerax
+    ch_og_iqtree_dir
     genomes_tsv
 
     main:
     /*
-     * Join raw CDS FASTAs to original NT IQ-TREE outputs.
+     * Join raw CDS FASTAs to original IQ-TREE output directories.
      *
      * ch_og_raw_fasta:
      *   tuple(og, raw_cds_fasta)
      *
-     * ch_og_iqtree_for_alerax:
-     *   tuple(og, iqtree_dir, nt_alignment)
+     * ch_og_iqtree_dir:
+     *   tuple(og, iqtree_dir)
      *
      * Joined:
-     *   tuple(og, raw_cds_fasta, iqtree_dir, nt_alignment)
+     *   tuple(og, raw_cds_fasta, iqtree_dir)
      */
     ch_og_raw_tree = ch_og_raw_fasta
-        .join(ch_og_iqtree_for_alerax)
-        .map { og, raw_fasta, iqtree_dir, nt_alignment ->
-            tuple(og, raw_fasta, iqtree_dir, nt_alignment)
+        .join(ch_og_iqtree_dir)
+        .map { og, raw_fasta, iqtree_dir ->
+            tuple(og, raw_fasta, iqtree_dir)
         }
 
     DECOMPOSE_LONG_BRANCH_TREES(ch_og_raw_tree)
