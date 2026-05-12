@@ -1,19 +1,6 @@
 /*
  * Tree-cleaning subworkflow for wgd-nextflow.
  *
- * Full workflow:
- *
- * decompose original gene tree
- *   -> filter decomposed subtrees
- *   -> extract raw CDS FASTAs
- *   -> MACSE re-align decomposed subtrees
- *   -> IQ-TREE rebuild decomposed subtrees
- *   -> TreeShrink
- *   -> prune raw FASTAs using TreeShrink removals
- *   -> filter post-TreeShrink units
- *   -> MACSE re-align final pruned FASTAs
- *   -> IQ-TREE rebuild final cleaned trees
- *
  * Expected inputs:
  *
  * ch_og_raw_fasta:
@@ -24,28 +11,14 @@
  *
  * genomes_tsv:
  *   path genomes.tsv
- *
- * Emitted outputs:
- *
- * cleaned_for_alerax:
- *   tuple val(unit), path(cleaned_iqtree_dir), path(cleaned_nt_alignment)
- *
- * cleaned_for_redip:
- *   tuple val(unit), path(cleaned_iqtree_dir)
- *
- * cleaned_dirs:
- *   tuple val(unit), path(cleaned_iqtree_dir)
- *
- * report:
- *   path tree_cleaning_report.tsv
  */
-
 
 process DECOMPOSE_LONG_BRANCH_TREES {
     tag { og }
 
     input:
     tuple val(og), path(raw_fasta), path(iqtree_dir)
+    path decompose_script
 
     output:
     tuple val(og),
@@ -70,7 +43,7 @@ process DECOMPOSE_LONG_BRANCH_TREES {
       exit 1
     fi
 
-    python3 ${projectDir}/scripts/treeclean/decompose_tree_by_long_branches.py \
+    python3 ${decompose_script} \
       --og "og_${og}" \
       --tree "\$treefile" \
       --min-branch ${params.treeclean_min_branch} \
@@ -87,6 +60,7 @@ process FILTER_DECOMPOSED_SUBTREES {
     input:
     tuple val(og), path(membership), path(decomp_report)
     path genomes_tsv
+    path filter_script
 
     output:
     tuple val(og),
@@ -99,7 +73,7 @@ process FILTER_DECOMPOSED_SUBTREES {
     """
     set -euo pipefail
 
-    python3 ${projectDir}/scripts/treeclean/filter_cleaning_units.py \
+    python3 ${filter_script} \
       --membership "${membership}" \
       --genomes-tsv "${genomes_tsv}" \
       --min-species ${params.treeclean_min_species} \
@@ -117,6 +91,7 @@ process WRITE_DECOMPOSED_FASTAS {
 
     input:
     tuple val(og), path(raw_fasta), path(passing_membership)
+    path write_fastas_script
 
     output:
     path "decomposed_fasta/*.fasta", emit: fastas, optional: true
@@ -128,7 +103,7 @@ process WRITE_DECOMPOSED_FASTAS {
 
     mkdir -p decomposed_fasta
 
-    python3 ${projectDir}/scripts/treeclean/write_fastas_from_membership.py \
+    python3 ${write_fastas_script} \
       --og "og_${og}" \
       --raw-fasta "${raw_fasta}" \
       --membership "${passing_membership}" \
@@ -228,6 +203,7 @@ process MAKE_TREESHRINK_INPUTS {
 
     input:
     path iqtree_dirs
+    path make_treeshrink_inputs_script
 
     output:
     path "treeshrink_input.trees"
@@ -237,7 +213,7 @@ process MAKE_TREESHRINK_INPUTS {
     """
     set -euo pipefail
 
-    python3 ${projectDir}/scripts/treeclean/make_treeshrink_inputs.py \
+    python3 ${make_treeshrink_inputs_script} \
       --iqtree-dirs ${iqtree_dirs} \
       --out-trees treeshrink_input.trees \
       --out-order treeshrink_tree_order.tsv
@@ -250,6 +226,7 @@ process WRITE_TREESHRINK_PROTECTED_SPECIES {
 
     input:
     path genomes_tsv
+    path write_protected_outgroups_script
 
     output:
     path "treeshrink_protected_species.txt"
@@ -258,7 +235,7 @@ process WRITE_TREESHRINK_PROTECTED_SPECIES {
     """
     set -euo pipefail
 
-    python3 ${projectDir}/scripts/treeclean/write_protected_outgroups.py \
+    python3 ${write_protected_outgroups_script} \
       --genomes-tsv "${genomes_tsv}" \
       --out treeshrink_protected_species.txt
     """
@@ -272,6 +249,7 @@ process RUN_TREESHRINK_DECOMPOSED {
     path trees
     path tree_order
     path protected_species
+    path parse_treeshrink_removals_script
 
     output:
     path "treeshrink_out", emit: outdir
@@ -295,7 +273,7 @@ process RUN_TREESHRINK_DECOMPOSED {
       -O treeshrink \
       > treeshrink.log 2>&1
 
-    python3 ${projectDir}/scripts/treeclean/parse_treeshrink_removals.py \
+    python3 ${parse_treeshrink_removals_script} \
       --treeshrink-dir treeshrink_out \
       --prefix treeshrink \
       --alpha ${params.treeshrink_alpha} \
@@ -311,6 +289,7 @@ process WRITE_TREESHRINK_PRUNED_FASTAS {
     input:
     path decomposed_fastas
     path removals
+    path prune_fastas_script
 
     output:
     path "pruned_fasta/*.fasta", emit: fastas, optional: true
@@ -323,7 +302,7 @@ process WRITE_TREESHRINK_PRUNED_FASTAS {
 
     mkdir -p pruned_fasta
 
-    python3 ${projectDir}/scripts/treeclean/prune_fastas_from_treeshrink.py \
+    python3 ${prune_fastas_script} \
       --fastas ${decomposed_fastas} \
       --removals "${removals}" \
       --out-dir pruned_fasta \
@@ -339,6 +318,7 @@ process FILTER_POST_TREESHRINK_SUBTREES {
     input:
     path membership
     path genomes_tsv
+    path filter_script
 
     output:
     path "final_passing_membership.tsv"
@@ -350,7 +330,7 @@ process FILTER_POST_TREESHRINK_SUBTREES {
     """
     set -euo pipefail
 
-    python3 ${projectDir}/scripts/treeclean/filter_cleaning_units.py \
+    python3 ${filter_script} \
       --membership "${membership}" \
       --genomes-tsv "${genomes_tsv}" \
       --min-species ${params.treeclean_min_species} \
@@ -369,6 +349,7 @@ process SELECT_FINAL_FASTAS {
     input:
     path pruned_fastas
     path final_passing_membership
+    path select_fastas_script
 
     output:
     path "final_raw_fasta/*.fasta", emit: fastas, optional: true
@@ -380,7 +361,7 @@ process SELECT_FINAL_FASTAS {
 
     mkdir -p final_raw_fasta
 
-    python3 ${projectDir}/scripts/treeclean/select_fastas_from_membership.py \
+    python3 ${select_fastas_script} \
       --fastas ${pruned_fastas} \
       --membership "${final_passing_membership}" \
       --out-dir final_raw_fasta \
@@ -482,6 +463,7 @@ process TREE_CLEANING_REPORT {
     path subtree_filter_reports
     path treeshrink_pruning_report
     path post_treeshrink_filter_report
+    path combine_reports_script
 
     output:
     path "tree_cleaning_report.tsv"
@@ -490,7 +472,7 @@ process TREE_CLEANING_REPORT {
     """
     set -euo pipefail
 
-    python3 ${projectDir}/scripts/treeclean/combine_treeclean_reports.py \
+    python3 ${combine_reports_script} \
       --decomposition-reports ${decomp_reports} \
       --subtree-filter-reports ${subtree_filter_reports} \
       --treeshrink-pruning-report "${treeshrink_pruning_report}" \
@@ -507,34 +489,33 @@ workflow TREECLEAN {
     genomes_tsv
 
     main:
-    /*
-     * Join raw CDS FASTAs to original IQ-TREE output directories.
-     *
-     * ch_og_raw_fasta:
-     *   tuple(og, raw_cds_fasta)
-     *
-     * ch_og_iqtree_dir:
-     *   tuple(og, iqtree_dir)
-     *
-     * Joined:
-     *   tuple(og, raw_cds_fasta, iqtree_dir)
-     */
+    decompose_script_ch = Channel.value(file("${projectDir}/scripts/treeclean/decompose_tree_by_long_branches.py", checkIfExists: true))
+    filter_script_ch = Channel.value(file("${projectDir}/scripts/treeclean/filter_cleaning_units.py", checkIfExists: true))
+    write_fastas_script_ch = Channel.value(file("${projectDir}/scripts/treeclean/write_fastas_from_membership.py", checkIfExists: true))
+    make_treeshrink_inputs_script_ch = Channel.value(file("${projectDir}/scripts/treeclean/make_treeshrink_inputs.py", checkIfExists: true))
+    write_protected_outgroups_script_ch = Channel.value(file("${projectDir}/scripts/treeclean/write_protected_outgroups.py", checkIfExists: true))
+    parse_treeshrink_removals_script_ch = Channel.value(file("${projectDir}/scripts/treeclean/parse_treeshrink_removals.py", checkIfExists: true))
+    prune_fastas_script_ch = Channel.value(file("${projectDir}/scripts/treeclean/prune_fastas_from_treeshrink.py", checkIfExists: true))
+    select_fastas_script_ch = Channel.value(file("${projectDir}/scripts/treeclean/select_fastas_from_membership.py", checkIfExists: true))
+    combine_reports_script_ch = Channel.value(file("${projectDir}/scripts/treeclean/combine_treeclean_reports.py", checkIfExists: true))
+
     ch_og_raw_tree = ch_og_raw_fasta
         .join(ch_og_iqtree_dir)
         .map { og, raw_fasta, iqtree_dir ->
             tuple(og, raw_fasta, iqtree_dir)
         }
 
-    DECOMPOSE_LONG_BRANCH_TREES(ch_og_raw_tree)
+    DECOMPOSE_LONG_BRANCH_TREES(
+        ch_og_raw_tree,
+        decompose_script_ch
+    )
 
     FILTER_DECOMPOSED_SUBTREES(
         DECOMPOSE_LONG_BRANCH_TREES.out,
-        genomes_tsv
+        genomes_tsv,
+        filter_script_ch
     )
 
-    /*
-     * Join raw FASTAs to passing subtree membership.
-     */
     ch_raw_plus_passing_membership = ch_og_raw_fasta
         .join(
             FILTER_DECOMPOSED_SUBTREES.out.map { og, passing_membership, report ->
@@ -545,14 +526,11 @@ workflow TREECLEAN {
             tuple(og, raw_fasta, passing_membership)
         }
 
-    WRITE_DECOMPOSED_FASTAS(ch_raw_plus_passing_membership)
+    WRITE_DECOMPOSED_FASTAS(
+        ch_raw_plus_passing_membership,
+        write_fastas_script_ch
+    )
 
-    /*
-     * Scatter decomposed raw FASTAs into MACSE.
-     *
-     * Unit names are taken directly from FASTA base names, for example:
-     *   og_1234_subtree_001
-     */
     ch_decomposed_fastas = WRITE_DECOMPOSED_FASTAS.out.fastas
         .flatten()
         .map { fasta ->
@@ -563,48 +541,49 @@ workflow TREECLEAN {
 
     IQTREE_DECOMPOSED(MACSE_ALIGN_DECOMPOSED.out)
 
-    /*
-     * TreeShrink should run over the full set of decomposed trees.
-     */
     ch_decomposed_iqtree_dirs = IQTREE_DECOMPOSED.out
         .map { unit, iqtree_dir, nt_aln -> iqtree_dir }
         .collect()
 
-    MAKE_TREESHRINK_INPUTS(ch_decomposed_iqtree_dirs)
+    MAKE_TREESHRINK_INPUTS(
+        ch_decomposed_iqtree_dirs,
+        make_treeshrink_inputs_script_ch
+    )
 
-    WRITE_TREESHRINK_PROTECTED_SPECIES(genomes_tsv)
+    WRITE_TREESHRINK_PROTECTED_SPECIES(
+        genomes_tsv,
+        write_protected_outgroups_script_ch
+    )
 
     RUN_TREESHRINK_DECOMPOSED(
         MAKE_TREESHRINK_INPUTS.out[0],
         MAKE_TREESHRINK_INPUTS.out[1],
-        WRITE_TREESHRINK_PROTECTED_SPECIES.out
+        WRITE_TREESHRINK_PROTECTED_SPECIES.out,
+        parse_treeshrink_removals_script_ch
     )
 
-    /*
-     * Prune the decomposed raw FASTAs using TreeShrink's removal calls.
-     */
     ch_all_decomposed_fastas = WRITE_DECOMPOSED_FASTAS.out.fastas
         .flatten()
         .collect()
 
     WRITE_TREESHRINK_PRUNED_FASTAS(
         ch_all_decomposed_fastas,
-        RUN_TREESHRINK_DECOMPOSED.out.removals
+        RUN_TREESHRINK_DECOMPOSED.out.removals,
+        prune_fastas_script_ch
     )
 
     FILTER_POST_TREESHRINK_SUBTREES(
         WRITE_TREESHRINK_PRUNED_FASTAS.out.membership,
-        genomes_tsv
+        genomes_tsv,
+        filter_script_ch
     )
 
     SELECT_FINAL_FASTAS(
         WRITE_TREESHRINK_PRUNED_FASTAS.out.fastas.flatten().collect(),
-        FILTER_POST_TREESHRINK_SUBTREES.out[0]
+        FILTER_POST_TREESHRINK_SUBTREES.out[0],
+        select_fastas_script_ch
     )
 
-    /*
-     * Scatter final pruned raw FASTAs into MACSE.
-     */
     ch_final_raw_fastas = SELECT_FINAL_FASTAS.out.fastas
         .flatten()
         .map { fasta ->
@@ -620,7 +599,8 @@ workflow TREECLEAN {
         DECOMPOSE_LONG_BRANCH_TREES.out.map { og, membership, report -> report }.collect(),
         FILTER_DECOMPOSED_SUBTREES.out.map { og, membership, report -> report }.collect(),
         WRITE_TREESHRINK_PRUNED_FASTAS.out.report,
-        FILTER_POST_TREESHRINK_SUBTREES.out[1]
+        FILTER_POST_TREESHRINK_SUBTREES.out[1],
+        combine_reports_script_ch
     )
 
     emit:
