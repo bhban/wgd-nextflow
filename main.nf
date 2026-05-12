@@ -177,6 +177,20 @@ def makeOgFastaChannelFromDirChannel(dir_ch) {
     }
 }
 
+def makeTreecleanNtAlignmentChannelFromDir(ntDir) {
+    Channel
+        .fromPath("${ntDir}/og_*_NT.fasta", checkIfExists: true)
+        .map { nt ->
+            def m = (nt.baseName =~ /^og_(.+)_NT$/)
+            if (!m) {
+                throw new IllegalArgumentException("Could not parse OG from NT alignment filename: ${nt}")
+            }
+
+            def og = m[0][1]
+            tuple(og, nt)
+        }
+}
+
 
 // Workflow
 workflow {
@@ -361,6 +375,10 @@ workflow {
             error "--treeclean.gene_trees_dir must be provided when --start_mode treeclean"
         }
 
+        if (!params.treeclean?.nt_alignments_dir?.toString()?.trim()) {
+            error "--treeclean.nt_alignments_dir must be provided when --start_mode treeclean"
+        }
+
         if (params.run_alerax && params.use_species_tree_for_alerax && !species_tree_path) {
             error "--species_tree must be provided when --start_mode treeclean, --run_alerax is true, and --use_species_tree_for_alerax is true"
         }
@@ -393,9 +411,14 @@ workflow {
             params.treeclean.gene_trees_dir
         )
 
+        def treeclean_nt_alignment_ch = makeTreecleanNtAlignmentChannelFromDir(
+            params.treeclean.nt_alignments_dir
+        )
+
         def treeclean_out = TREECLEAN(
             treeclean_og_fasta_ch,
             treeclean_iqtree_dir_ch,
+            treeclean_nt_alignment_ch,
             genomes_tsv_ch
         )
 
@@ -788,6 +811,13 @@ workflow {
             treeclean_out = TREECLEAN(
                 og_cds_fasta_ch,
                 iqtree_nt_out.map { og, iqtree_dir -> tuple(og, iqtree_dir) },
+                macse_out
+                    .filter { og, aa, nt, status, log ->
+                        status.text.trim() == 'OK'
+                    }
+                    .map { og, aa, nt, status, log ->
+                        tuple(og, nt)
+                    },
                 genomes_tsv_ch
             )
 
