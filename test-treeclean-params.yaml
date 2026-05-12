@@ -9,7 +9,10 @@ sif_paths:
   redip: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip_1.0.sif"
   treeclean: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/treeclean_1.0.sif"
 
-start_mode: treeclean
+start_mode: 'treeclean'
+
+genomes_tsv: "/exports/eddie/scratch/s2428892/redip-test/testdata/genomes.tsv"
+species_tree: "/exports/eddie/scratch/s2428892/redip-test/testdata/species_tree.nwk"
 
 run_tree_cleaning: true
 run_alerax: false
