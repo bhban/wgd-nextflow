@@ -32,5 +32,5 @@ treeclean_tip_separator: "|"
 treeclean_tip_label_format: species_chr_gene
 
 treeshrink_alpha: 0.005
-treeshrink_mode: per-species
+treeshrink_mode: all-genes
 treeshrink_protect_outgroups: true
