@@ -15,10 +15,57 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--fastas", nargs="+", required=True)
     parser.add_argument("--removals", required=True)
+    parser.add_argument("--genomes-tsv", required=True)
+    parser.add_argument("--tip-separator", default="|")
+    parser.add_argument(
+        "--tip-label-format",
+        default="species_chr_gene",
+        choices=["species_chr_gene", "species_gene", "species_only", "full_label"],
+    )
+    parser.add_argument("--protect-outgroups", action="store_true")
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("--out-membership", required=True)
     parser.add_argument("--out-report", required=True)
     return parser.parse_args()
+
+
+def truthy(value: str) -> bool:
+    return str(value).strip().lower() in {"1", "true", "t", "yes", "y", "outgroup"}
+
+
+def parse_species(tip: str, separator: str, label_format: str) -> str:
+    if label_format in {"species_chr_gene", "species_gene"}:
+        return tip.split(separator)[0]
+    if label_format == "species_only":
+        return tip
+    if label_format == "full_label":
+        return tip
+    raise ValueError(f"Unsupported tip label format: {label_format}")
+
+
+def read_outgroups(genomes_tsv: str) -> Set[str]:
+    outgroups = set()
+
+    with open(genomes_tsv, newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+
+        if not reader.fieldnames:
+            raise ValueError(f"Could not read header from genomes TSV: {genomes_tsv}")
+
+        if "genome_id" not in reader.fieldnames:
+            raise ValueError("genomes.tsv must contain a genome_id column")
+
+        has_outgroup_col = "outgroup" in reader.fieldnames
+
+        for row in reader:
+            genome = row["genome_id"].strip()
+            if not genome:
+                continue
+
+            if has_outgroup_col and truthy(row.get("outgroup", "0")):
+                outgroups.add(genome)
+
+    return outgroups
 
 
 def read_fasta(path: str) -> Dict[str, str]:
@@ -103,6 +150,8 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     removals = read_removals(args.removals)
+    outgroups = read_outgroups(args.genomes_tsv)
+
     report_rows = []
 
     with open(args.out_membership, "w", newline="") as membership_handle:
@@ -125,8 +174,18 @@ def main() -> None:
 
             tips_before = set(seqs)
             requested_removals = removals.get(unit, set())
-            actual_removals = tips_before & requested_removals
-            missing_requested = requested_removals - tips_before
+
+            protected_requested = set()
+            if args.protect_outgroups:
+                for tip in requested_removals:
+                    species = parse_species(tip, args.tip_separator, args.tip_label_format)
+                    if species in outgroups:
+                        protected_requested.add(tip)
+
+            effective_requested_removals = requested_removals - protected_requested
+
+            actual_removals = tips_before & effective_requested_removals
+            missing_requested = effective_requested_removals - tips_before
             kept = {tip: seq for tip, seq in seqs.items() if tip not in actual_removals}
 
             was_pruned = bool(actual_removals)
@@ -161,10 +220,13 @@ def main() -> None:
                     "pruned_fasta": str(out_fasta),
                     "n_tips_before": len(tips_before),
                     "n_requested_removals": len(requested_removals),
+                    "n_protected_requested_removals": len(protected_requested),
+                    "n_effective_requested_removals": len(effective_requested_removals),
                     "n_removed": len(actual_removals),
                     "n_missing_requested_removals": len(missing_requested),
                     "n_tips_after": len(kept),
                     "removed_tips": ",".join(sorted(actual_removals)) if actual_removals else "NA",
+                    "protected_requested_removals": ",".join(sorted(protected_requested)) if protected_requested else "NA",
                     "missing_requested_removals": ",".join(sorted(missing_requested)) if missing_requested else "NA",
                 }
             )
@@ -180,10 +242,13 @@ def main() -> None:
             "pruned_fasta",
             "n_tips_before",
             "n_requested_removals",
+            "n_protected_requested_removals",
+            "n_effective_requested_removals",
             "n_removed",
             "n_missing_requested_removals",
             "n_tips_after",
             "removed_tips",
+            "protected_requested_removals",
             "missing_requested_removals",
         ]
         writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter="\t")
