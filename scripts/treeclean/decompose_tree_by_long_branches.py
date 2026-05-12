@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-from pathlib import Path
 from typing import List, Optional, Set, Tuple
 
 from ete3 import Tree
@@ -24,7 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-branch", type=float, required=True, help="Minimum branch length to cut")
     parser.add_argument("--min-tips", type=int, default=4, help="Minimum tips required on both sides of a cut")
     parser.add_argument("--tree-format", type=int, default=1, help="ETE tree format code")
-    parser.add_argument("--out-membership", required=True, help="Output subtree membership TSV")
+    parser.add_argument("--out-membership", required=True, help="Output cleaning-unit membership TSV")
     parser.add_argument("--out-report", required=True, help="Output decomposition report TSV")
     return parser.parse_args()
 
@@ -115,15 +114,42 @@ def decompose(
     return components, cuts
 
 
-def write_membership(path: str, og: str, components: List[Set[str]]) -> None:
+def write_membership(
+    path: str,
+    og: str,
+    components: List[Set[str]],
+    was_decomposed: bool,
+) -> None:
     with open(path, "w", newline="") as handle:
         writer = csv.writer(handle, delimiter="\t")
-        writer.writerow(["original_og", "cleaning_unit_id", "subtree_index", "tip"])
+        writer.writerow(
+            [
+                "original_og",
+                "cleaning_unit_id",
+                "subtree_index",
+                "was_decomposed",
+                "tip",
+            ]
+        )
 
         for i, tips in enumerate(components, start=1):
-            unit = f"{og}_subtree_{i:03d}"
+            if was_decomposed:
+                unit = f"{og}_subtree_{i:03d}"
+                subtree_index = str(i)
+            else:
+                unit = og
+                subtree_index = "NA"
+
             for tip in sorted(tips):
-                writer.writerow([og, unit, i, tip])
+                writer.writerow(
+                    [
+                        og,
+                        unit,
+                        subtree_index,
+                        str(was_decomposed).lower(),
+                        tip,
+                    ]
+                )
 
 
 def write_report(
@@ -135,8 +161,11 @@ def write_report(
     min_branch: float,
     min_tips: int,
 ) -> None:
+    was_decomposed = bool(cuts)
+
     fieldnames = [
         "original_og",
+        "was_decomposed",
         "n_tips_original",
         "n_subtrees",
         "n_cuts",
@@ -156,6 +185,7 @@ def write_report(
             writer.writerow(
                 {
                     "original_og": og,
+                    "was_decomposed": str(was_decomposed).lower(),
                     "n_tips_original": n_tips_original,
                     "n_subtrees": len(components),
                     "n_cuts": 0,
@@ -173,6 +203,7 @@ def write_report(
             writer.writerow(
                 {
                     "original_og": og,
+                    "was_decomposed": str(was_decomposed).lower(),
                     "n_tips_original": n_tips_original,
                     "n_subtrees": len(components),
                     "n_cuts": len(cuts),
@@ -198,7 +229,15 @@ def main() -> None:
         min_tips=args.min_tips,
     )
 
-    write_membership(args.out_membership, args.og, components)
+    was_decomposed = bool(cuts)
+
+    write_membership(
+        path=args.out_membership,
+        og=args.og,
+        components=components,
+        was_decomposed=was_decomposed,
+    )
+
     write_report(
         path=args.out_report,
         og=args.og,
