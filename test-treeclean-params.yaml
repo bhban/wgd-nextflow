@@ -21,6 +21,7 @@ run_rediploidisation: false
 treeclean:
   og_fasta_dir: /exports/eddie/scratch/s2428892/redip-test/results/post_genespace_test/og_fasta
   gene_trees_dir: /exports/eddie/scratch/s2428892/redip-test/results/post_genespace_test/iqtree
+  nt_alignments_dir: /exports/eddie/scratch/s2428892/redip-test/results/post_genespace_test/macse
 
 treeclean_min_branch: 1.0
 treeclean_min_tips: 4
