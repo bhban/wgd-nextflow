@@ -13,7 +13,7 @@ def parse_args() -> argparse.Namespace:
         description=(
             "Filter tree-cleaning units by species count and outgroup presence. "
             "The input membership TSV must contain original_og, cleaning_unit_id, "
-            "subtree_index, and tip."
+            "subtree_index, and tip. The was_decomposed column is preserved if present."
         )
     )
     parser.add_argument("--membership", required=True)
@@ -78,6 +78,7 @@ def main() -> None:
     tips_by_unit: Dict[str, Set[str]] = defaultdict(set)
     original_og_by_unit: Dict[str, str] = {}
     subtree_index_by_unit: Dict[str, str] = {}
+    was_decomposed_by_unit: Dict[str, str] = {}
 
     with open(args.membership, newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
@@ -89,10 +90,12 @@ def main() -> None:
         for row in reader:
             unit = row["cleaning_unit_id"]
             tip = row["tip"]
+
             rows_by_unit[unit].append(row)
             tips_by_unit[unit].add(tip)
             original_og_by_unit[unit] = row["original_og"]
             subtree_index_by_unit[unit] = row["subtree_index"]
+            was_decomposed_by_unit[unit] = row.get("was_decomposed", "NA")
 
     passing_units = set()
     report_rows = []
@@ -123,6 +126,7 @@ def main() -> None:
                 "original_og": original_og_by_unit[unit],
                 "cleaning_unit_id": unit,
                 "subtree_index": subtree_index_by_unit[unit],
+                "was_decomposed": was_decomposed_by_unit[unit],
                 "n_tips": len(tips),
                 "n_species": len(species),
                 "species": ",".join(sorted(species)) if species else "NA",
@@ -134,19 +138,34 @@ def main() -> None:
         )
 
     with open(args.out_membership, "w", newline="") as handle:
-        fieldnames = ["original_og", "cleaning_unit_id", "subtree_index", "tip"]
+        fieldnames = [
+            "original_og",
+            "cleaning_unit_id",
+            "subtree_index",
+            "was_decomposed",
+            "tip",
+        ]
         writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter="\t")
         writer.writeheader()
 
         for unit in sorted(passing_units):
             for row in rows_by_unit[unit]:
-                writer.writerow({key: row[key] for key in fieldnames})
+                writer.writerow(
+                    {
+                        "original_og": row["original_og"],
+                        "cleaning_unit_id": row["cleaning_unit_id"],
+                        "subtree_index": row["subtree_index"],
+                        "was_decomposed": row.get("was_decomposed", "NA"),
+                        "tip": row["tip"],
+                    }
+                )
 
     with open(args.out_report, "w", newline="") as handle:
         fieldnames = [
             "original_og",
             "cleaning_unit_id",
             "subtree_index",
+            "was_decomposed",
             "n_tips",
             "n_species",
             "species",
