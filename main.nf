@@ -149,6 +149,19 @@ def makeAleraxInputChannelFromDirs(treeDir, ntDir) {
         }
 }
 
+def makeTreecleanOgFastaChannelFromDir(ogFastaDir) {
+    Channel
+        .fromPath("${ogFastaDir}/og_*.fasta", checkIfExists: true)
+        .map { fasta ->
+            def m = (fasta.baseName =~ /^og_(.+)$/)
+            if (!m) {
+                throw new IllegalArgumentException("Could not parse OG from FASTA filename: ${fasta}")
+            }
+
+            tuple(m[0][1], fasta)
+        }
+}
+
 def makeOgFastaChannelFromDirChannel(dir_ch) {
     dir_ch.flatMap { og_dir ->
         og_dir.listFiles()
@@ -325,6 +338,123 @@ workflow {
         )
         post_outputs_ch = post_outputs_ch.mix(redip_out.report)
 
+    /*
+     * =========================
+     * TREECLEAN MODE
+     * =========================
+     */
+
+    } else if (params.start_mode == 'treeclean') {
+
+        genomes_rows = readGenomesTable(params.genomes_tsv)
+        genomes_tsv_ch = Channel.value(file(params.genomes_tsv, checkIfExists: true))
+
+        if (!params.run_tree_cleaning) {
+            error "--run_tree_cleaning must be true when --start_mode treeclean"
+        }
+
+        if (!params.treeclean?.og_fasta_dir?.toString()?.trim()) {
+            error "--treeclean.og_fasta_dir must be provided when --start_mode treeclean"
+        }
+
+        if (!params.treeclean?.gene_trees_dir?.toString()?.trim()) {
+            error "--treeclean.gene_trees_dir must be provided when --start_mode treeclean"
+        }
+
+        if (params.run_alerax && params.use_species_tree_for_alerax && !species_tree_path) {
+            error "--species_tree must be provided when --start_mode treeclean, --run_alerax is true, and --use_species_tree_for_alerax is true"
+        }
+
+        if (params.run_rediploidisation && !species_tree_path) {
+            error "--species_tree must be provided when --start_mode treeclean and --run_rediploidisation is true"
+        }
+
+        if (
+            params.run_rediploidisation &&
+            redipParams.positions_source == 'positions' &&
+            !redipParams.positions?.toString()?.trim()
+        ) {
+            error "--rediploidisation.positions must be provided when positions_source = positions"
+        }
+
+        if (
+            params.run_rediploidisation &&
+            redipParams.positions_source != 'positions' &&
+            !redipParams.genespace_wd?.toString()?.trim()
+        ) {
+            error "--rediploidisation.genespace_wd must be provided for redip after treeclean unless positions_source = positions"
+        }
+
+        def treeclean_og_fasta_ch = makeTreecleanOgFastaChannelFromDir(
+            params.treeclean.og_fasta_dir
+        )
+
+        def treeclean_iqtree_dir_ch = makeIqtreeDirChannelFromDir(
+            params.treeclean.gene_trees_dir
+        )
+
+        def treeclean_out = TREECLEAN(
+            treeclean_og_fasta_ch,
+            treeclean_iqtree_dir_ch,
+            genomes_tsv_ch
+        )
+
+        post_outputs_ch = post_outputs_ch.mix(treeclean_out.report)
+        post_outputs_ch = post_outputs_ch.mix(
+            treeclean_out.cleaned_dirs.map { og, dir -> dir }.collect()
+        )
+
+        if (params.run_alerax) {
+            def alerax_models = resolveAleraxModels()
+            def alerax_models_ch = Channel.fromList(alerax_models)
+
+            def species_tree_ch = params.use_species_tree_for_alerax
+                ? Channel.value(file(species_tree_path, checkIfExists: true))
+                : Channel.empty()
+
+            def alerax_out = ALERAX_WORKFLOW(
+                treeclean_out.cleaned_for_alerax,
+                species_tree_ch,
+                alerax_models_ch
+            )
+
+            post_outputs_ch = post_outputs_ch.mix(alerax_out.families)
+            post_outputs_ch = post_outputs_ch.mix(alerax_out.manifest)
+            post_outputs_ch = post_outputs_ch.mix(
+                alerax_out.results.map { model_id, dir -> dir }.collect()
+            )
+            post_outputs_ch = post_outputs_ch.mix(alerax_out.report)
+        }
+
+        if (params.run_rediploidisation) {
+            def redip_genespace_wd_ch = redipParams.genespace_wd?.toString()?.trim()
+                ? Channel.value(file(redipParams.genespace_wd))
+                : Channel.value(file('.'))
+
+            def redip_out = REDIPLOIDISATION(
+                genomes_tsv_ch,
+                Channel.value(file(species_tree_path, checkIfExists: true)),
+                treeclean_out.cleaned_for_redip,
+                redip_genespace_wd_ch,
+                redipParams
+            )
+
+            post_outputs_ch = post_outputs_ch.mix(
+                redip_out.rooted_trees.flatMap { og, tree, summary -> [tree, summary] }.collect()
+            )
+            post_outputs_ch = post_outputs_ch.mix(redip_out.branch_definitions)
+            post_outputs_ch = post_outputs_ch.mix(
+                redip_out.classifications.map { species, file -> file }.collect()
+            )
+            post_outputs_ch = post_outputs_ch.mix(
+                redip_out.circos_links.map { species, file -> file }.collect()
+            )
+            post_outputs_ch = post_outputs_ch.mix(
+                redip_out.circos_plots.map { species, dir -> dir }.collect()
+            )
+            post_outputs_ch = post_outputs_ch.mix(redip_out.report)
+        }
+
     } else {
 
         /*
@@ -476,7 +606,7 @@ workflow {
             genespace_ready_out = VALIDATE_GENESPACE_RESULTS(existing_wd_ch)
 
         } else {
-            error "Unsupported start_mode: ${params.start_mode}. Use 'full', 'parsed', 'genespace', 'alerax', or 'redip'."
+            error "Unsupported start_mode: ${params.start_mode}. Use 'full', 'parsed', 'genespace', 'alerax', 'redip', or 'treeclean'."
         }
 
         if (params.start_mode != 'genespace') {
@@ -657,7 +787,7 @@ workflow {
 
             treeclean_out = TREECLEAN(
                 og_cds_fasta_ch,
-                iqtree_nt_for_alerax_ch,
+                iqtree_nt_out.map { og, iqtree_dir -> tuple(og, iqtree_dir) },
                 genomes_tsv_ch
             )
 
