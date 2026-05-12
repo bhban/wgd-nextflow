@@ -63,9 +63,11 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     seqs = read_fasta(args.raw_fasta)
+
     tips_by_unit = defaultdict(list)
     original_og_by_unit = {}
     subtree_index_by_unit = {}
+    was_decomposed_by_unit = {}
 
     with open(args.membership, newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
@@ -79,6 +81,7 @@ def main() -> None:
             tips_by_unit[unit].append(row["tip"])
             original_og_by_unit[unit] = row["original_og"]
             subtree_index_by_unit[unit] = row["subtree_index"]
+            was_decomposed_by_unit[unit] = row.get("was_decomposed", "NA")
 
     with open(args.out_manifest, "w", newline="") as manifest:
         writer = csv.writer(manifest, delimiter="\t")
@@ -87,6 +90,7 @@ def main() -> None:
                 "original_og",
                 "cleaning_unit_id",
                 "subtree_index",
+                "was_decomposed",
                 "fasta",
                 "n_tips",
                 "status",
@@ -104,6 +108,7 @@ def main() -> None:
                         original_og_by_unit[unit],
                         unit,
                         subtree_index_by_unit[unit],
+                        was_decomposed_by_unit[unit],
                         "NA",
                         len(tips),
                         "FAIL",
@@ -124,6 +129,7 @@ def main() -> None:
                     original_og_by_unit[unit],
                     unit,
                     subtree_index_by_unit[unit],
+                    was_decomposed_by_unit[unit],
                     out_fasta,
                     len(tips),
                     "OK",
