@@ -4,7 +4,7 @@
 start_mode: full
 
 # Input metadata
-genomes: genomes.tsv
+genomes: input/genomes.tsv
 
 # Input directories
 gff_dir: input/gff
