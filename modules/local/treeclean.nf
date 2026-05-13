@@ -466,6 +466,56 @@ process IQTREE_CLEANED_FINAL {
     """
 }
 
+process MATERIALISE_FINAL_TREE_DIRS {
+    tag { final_unit }
+
+    input:
+    tuple val(unit), val(final_unit), val(final_status), path(iqtree_dir), path(nt_aln)
+
+    output:
+    tuple val(final_unit),
+          path("final_trees/${final_unit}"),
+          path("final_trees/${final_unit}/${final_unit}_NT.fasta"),
+          path("final_trees/${final_unit}/${final_unit}.final_status.tsv")
+
+    script:
+    """
+    set -euo pipefail
+
+    outdir="final_trees/${final_unit}"
+    mkdir -p "\$outdir"
+
+    cp -a "${iqtree_dir}/." "\$outdir/"
+    cp -f "${nt_aln}" "\$outdir/${final_unit}_NT.fasta"
+
+    /*
+     * Standardise IQ-TREE filenames to the final unit name.
+     * This is important for pruned units, where the final published name
+     * may be ${unit}_trimmed but IQ-TREE generated files under ${unit}_iqtree.
+     */
+    treefile=\$(find "\$outdir" -maxdepth 1 -name "*_iqtree.treefile" | sort | head -n 1 || true)
+
+    if [ -n "\$treefile" ] && [ -s "\$treefile" ]; then
+      old_prefix=\$(basename "\$treefile" _iqtree.treefile)
+
+      for f in "\$outdir"/"\${old_prefix}"_iqtree.*; do
+        if [ -e "\$f" ]; then
+          suffix="\${f##*"\${old_prefix}"_iqtree}"
+          cp -f "\$f" "\$outdir/${final_unit}_iqtree\${suffix}"
+        fi
+      done
+    else
+      echo "Could not find *_iqtree.treefile in ${iqtree_dir}" >&2
+      exit 1
+    fi
+
+    cat > "\$outdir/${final_unit}.final_status.tsv" <<EOF
+original_unit	final_unit	final_status	source_iqtree_dir	source_nt_alignment
+${unit}	${final_unit}	${final_status}	${iqtree_dir}	${nt_aln}
+EOF
+    """
+}
+
 
 process TREE_CLEANING_REPORT {
     tag "tree_cleaning_report"
@@ -512,6 +562,10 @@ workflow TREECLEAN {
     select_fastas_script_ch = Channel.value(file("${projectDir}/scripts/treeclean/select_fastas_from_membership.py", checkIfExists: true))
     combine_reports_script_ch = Channel.value(file("${projectDir}/scripts/treeclean/combine_treeclean_reports.py", checkIfExists: true))
 
+    /*
+     * Step 1:
+     * Feed all original trees into the decomposition step.
+     */
     ch_og_raw_tree = ch_og_raw_fasta
         .join(ch_og_iqtree_dir)
         .map { og, raw_fasta, iqtree_dir ->
@@ -529,6 +583,15 @@ workflow TREECLEAN {
         filter_script_ch
     )
 
+    /*
+     * Write FASTAs for all post-decomposition units that pass the first filter.
+     *
+     * Unchanged OGs keep names like:
+     *   og_29
+     *
+     * True decomposed subtrees get names like:
+     *   og_351_subtree_001
+     */
     ch_raw_plus_passing_membership = ch_og_raw_fasta
         .join(
             FILTER_DECOMPOSED_SUBTREES.out.map { og, passing_membership, report ->
@@ -544,15 +607,6 @@ workflow TREECLEAN {
         write_fastas_script_ch
     )
 
-    /*
-     * Candidate units after decomposition:
-     *
-     * unchanged units:
-     *   og_29
-     *
-     * true decomposed units:
-     *   og_123_subtree_001
-     */
     ch_candidate_fastas = WRITE_DECOMPOSED_FASTAS.out.fastas
         .flatten()
         .map { fasta ->
@@ -568,32 +622,52 @@ workflow TREECLEAN {
     }
 
     /*
-     * Only true decomposed subtrees are realigned/rebuilt before TreeShrink.
+     * Step 2:
+     * Only true decomposed subtrees are realigned and rebuilt before TreeShrink.
      */
     MACSE_ALIGN_DECOMPOSED(ch_true_subtree_fastas)
 
     IQTREE_DECOMPOSED(MACSE_ALIGN_DECOMPOSED.out)
 
-    ch_rebuilt_decomposed_iqtree_dirs = IQTREE_DECOMPOSED.out
+    /*
+     * Current tree/alignment sources before TreeShrink.
+     *
+     * For decomposed units:
+     *   current source = newly rebuilt subtree tree/alignment
+     *
+     * For unchanged units:
+     *   current source = original IQ-TREE dir and original NT alignment
+     */
+    ch_rebuilt_decomposed_current_sources = IQTREE_DECOMPOSED.out
         .map { unit, iqtree_dir, nt_aln ->
-            tuple(unit, iqtree_dir)
+            tuple(unit, 'decomposed_rebuilt_before_treeshrink', iqtree_dir, nt_aln)
         }
 
-    ch_original_iqtree_dirs_for_unchanged = ch_unchanged_units
+    ch_original_current_sources = ch_unchanged_units
         .map { unit, fasta ->
             def og = unit.replaceFirst(/^og_/, '')
             tuple(og, unit)
         }
         .join(ch_og_iqtree_dir)
         .map { og, unit, iqtree_dir ->
-            tuple(unit, iqtree_dir)
+            tuple(og, unit, iqtree_dir)
+        }
+        .join(ch_og_nt_alignment)
+        .map { og, unit, iqtree_dir, nt_aln ->
+            tuple(unit, 'original_unchanged_before_treeshrink', iqtree_dir, nt_aln)
         }
 
-    ch_treeclean_iqtree_dirs_for_treeshrink = ch_rebuilt_decomposed_iqtree_dirs
-        .mix(ch_original_iqtree_dirs_for_unchanged)
+    ch_current_sources_before_treeshrink = ch_rebuilt_decomposed_current_sources
+        .mix(ch_original_current_sources)
 
-    ch_iqtree_dirs_for_treeshrink = ch_treeclean_iqtree_dirs_for_treeshrink
-        .map { unit, iqtree_dir -> iqtree_dir }
+    /*
+     * Step 3:
+     * TreeShrink input = unchanged original trees + rebuilt decomposed subtree trees.
+     */
+    ch_iqtree_dirs_for_treeshrink = ch_current_sources_before_treeshrink
+        .map { unit, current_status, iqtree_dir, nt_aln ->
+            iqtree_dir
+        }
         .collect()
 
     MAKE_TREESHRINK_INPUTS(
@@ -613,6 +687,10 @@ workflow TREECLEAN {
         parse_treeshrink_removals_script_ch
     )
 
+    /*
+     * Prune FASTAs using TreeShrink removal calls.
+     * Outgroup-protection is applied in the pruning script.
+     */
     ch_all_candidate_fastas = WRITE_DECOMPOSED_FASTAS.out.fastas
         .flatten()
         .collect()
@@ -637,14 +715,7 @@ workflow TREECLEAN {
     )
 
     /*
-     * Decide which units need a final rebuild.
-     *
-     * Rebuild if:
-     *   - the unit was decomposed, or
-     *   - TreeShrink pruned at least one tip
-     *
-     * Reuse original/rebuilt input if:
-     *   - the unit was not decomposed and TreeShrink pruned nothing
+     * Post-TreeShrink metadata.
      */
     ch_pruning_status = WRITE_TREESHRINK_PRUNED_FASTAS.out.report
         .splitCsv(header: true, sep: '\t')
@@ -656,6 +727,9 @@ workflow TREECLEAN {
             )
         }
 
+    /*
+     * Units that survived all filters.
+     */
     ch_final_raw_fastas_all = SELECT_FINAL_FASTAS.out.fastas
         .flatten()
         .map { fasta ->
@@ -663,75 +737,67 @@ workflow TREECLEAN {
             tuple(unit, fasta)
         }
 
+    /*
+     * Step 4:
+     * Only units that TreeShrink actually pruned are realigned and rebuilt.
+     *
+     * Important:
+     *   Decomposed-but-unpruned units are NOT rebuilt again here.
+     *   They keep the tree built in Step 2.
+     */
     ch_final_rebuild_fastas = ch_final_raw_fastas_all
         .join(ch_pruning_status)
         .filter { unit, fasta, was_decomposed, was_pruned ->
-            was_decomposed == 'true' || was_pruned == 'true'
+            was_pruned == 'true'
         }
         .map { unit, fasta, was_decomposed, was_pruned ->
             tuple(unit, fasta)
         }
 
-    ch_final_passthrough_units = ch_final_raw_fastas_all
-        .join(ch_pruning_status)
-        .filter { unit, fasta, was_decomposed, was_pruned ->
-            was_decomposed != 'true' && was_pruned != 'true'
-        }
-        .map { unit, fasta, was_decomposed, was_pruned ->
-            unit
-        }
-
-    /*
-     * Rebuild units that were decomposed or TreeShrink-pruned.
-     */
     MACSE_ALIGN_TREESHRINK_PRUNED(ch_final_rebuild_fastas)
 
     IQTREE_CLEANED_FINAL(MACSE_ALIGN_TREESHRINK_PRUNED.out)
 
-    ch_rebuilt_final_for_alerax = IQTREE_CLEANED_FINAL.out.map { unit, iqtree_dir, nt_aln ->
-        tuple(unit, iqtree_dir, nt_aln)
-    }
-
-    ch_rebuilt_final_for_redip = IQTREE_CLEANED_FINAL.out.map { unit, iqtree_dir, nt_aln ->
-        tuple(unit, iqtree_dir)
-    }
-
-    ch_rebuilt_final_dirs = IQTREE_CLEANED_FINAL.out.map { unit, iqtree_dir, nt_aln ->
-        tuple(unit, iqtree_dir)
-    }
+    /*
+     * Final sources for TreeShrink-pruned units.
+     * These receive a _trimmed suffix in the final published directory.
+     */
+    ch_pruned_final_sources = IQTREE_CLEANED_FINAL.out
+        .map { unit, iqtree_dir, nt_aln ->
+            def final_unit = "${unit}_trimmed"
+            tuple(unit, final_unit, 'treeshrink_pruned_rebuilt', iqtree_dir, nt_aln)
+        }
 
     /*
-     * Passthrough units reuse the original tree and original NT alignment.
-     * These are only unchanged and unpruned original OGs.
+     * Final sources for units that were not pruned by TreeShrink.
+     * These reuse their current source from before TreeShrink:
+     *
+     *   unchanged original OG -> original tree/alignment
+     *   decomposed subtree    -> rebuilt subtree tree/alignment
      */
-    ch_passthrough_keyed = ch_final_passthrough_units
-        .map { unit ->
-            def unit_id = unit instanceof List ? unit[0].toString() : unit.toString()
-            def og = unit_id.replaceFirst(/^og_/, '')
-            tuple(og, unit_id)
+    ch_final_unpruned_unit_keys = ch_final_raw_fastas_all
+        .join(ch_pruning_status)
+        .filter { unit, fasta, was_decomposed, was_pruned ->
+            was_pruned != 'true'
+        }
+        .map { unit, fasta, was_decomposed, was_pruned ->
+            tuple(unit, true)
         }
 
-    ch_passthrough_with_tree = ch_passthrough_keyed
-        .join(ch_og_iqtree_dir)
-        .map { og, unit, iqtree_dir ->
-            tuple(og, unit, iqtree_dir)
+    ch_unpruned_final_sources = ch_final_unpruned_unit_keys
+        .join(ch_current_sources_before_treeshrink)
+        .map { unit, keep_flag, current_status, iqtree_dir, nt_aln ->
+            tuple(unit, unit, current_status, iqtree_dir, nt_aln)
         }
 
-    ch_passthrough_for_alerax = ch_passthrough_with_tree
-        .join(ch_og_nt_alignment)
-        .map { og, unit, iqtree_dir, nt_aln ->
-            tuple(unit, iqtree_dir, nt_aln)
-        }
+    /*
+     * Step 5:
+     * Materialise ALL final trees into one clean final_trees directory.
+     */
+    ch_all_final_sources = ch_unpruned_final_sources
+        .mix(ch_pruned_final_sources)
 
-    ch_passthrough_for_redip = ch_passthrough_with_tree
-        .map { og, unit, iqtree_dir ->
-            tuple(unit, iqtree_dir)
-        }
-
-    ch_passthrough_dirs = ch_passthrough_with_tree
-        .map { og, unit, iqtree_dir ->
-            tuple(unit, iqtree_dir)
-        }
+    MATERIALISE_FINAL_TREE_DIRS(ch_all_final_sources)
 
     TREE_CLEANING_REPORT(
         DECOMPOSE_LONG_BRANCH_TREES.out.map { og, membership, report -> report }.collect(),
@@ -742,11 +808,21 @@ workflow TREECLEAN {
     )
 
     emit:
-    cleaned_for_alerax = ch_rebuilt_final_for_alerax.mix(ch_passthrough_for_alerax)
+    cleaned_for_alerax = MATERIALISE_FINAL_TREE_DIRS.out.map { unit, final_dir, nt_aln, status ->
+        tuple(unit, final_dir, nt_aln)
+    }
 
-    cleaned_for_redip = ch_rebuilt_final_for_redip.mix(ch_passthrough_for_redip)
+    cleaned_for_redip = MATERIALISE_FINAL_TREE_DIRS.out.map { unit, final_dir, nt_aln, status ->
+        tuple(unit, final_dir)
+    }
 
-    cleaned_dirs = ch_rebuilt_final_dirs.mix(ch_passthrough_dirs)
+    cleaned_dirs = MATERIALISE_FINAL_TREE_DIRS.out.map { unit, final_dir, nt_aln, status ->
+        tuple(unit, final_dir)
+    }
+
+    final_trees = MATERIALISE_FINAL_TREE_DIRS.out.map { unit, final_dir, nt_aln, status ->
+        final_dir
+    }.collect()
 
     report = TREE_CLEANING_REPORT.out
 }
