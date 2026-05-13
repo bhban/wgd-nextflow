@@ -1,0 +1,36 @@
+sif_paths:
+  genespace: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/genespace_1.1.sif"
+  macse: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/macse_1.0.sif"
+  mafft: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/mafft_1.0.sif"
+  iqtree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/iqtree_1.0.sif"
+  alerax: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/alerax_1.0.sif"
+  annevo: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/annevo_1.0.sif"
+  gffutils: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/gffutils_1.0.sif"
+  redip: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip_1.0.sif"
+  treeclean: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/treeclean_1.0.sif"
+
+start_mode: 'treeclean'
+
+genomes_tsv: "/exports/eddie/scratch/s2428892/redip-test/testdata/genomes.tsv"
+species_tree: "/exports/eddie/scratch/s2428892/redip-test/testdata/species_tree.nwk"
+
+run_tree_cleaning: true
+run_alerax: false
+run_rediploidisation: false
+
+treeclean:
+  og_fasta_dir: /exports/eddie/scratch/s2428892/redip-test/results/post_genespace_test/og_fasta
+  gene_trees_dir: /exports/eddie/scratch/s2428892/redip-test/results/post_genespace_test/iqtree
+  nt_alignments_dir: /exports/eddie/scratch/s2428892/redip-test/results/post_genespace_test/macse
+
+treeclean_min_branch: 1.0
+treeclean_min_tips: 4
+treeclean_min_species: 4
+treeclean_require_outgroup: true
+
+treeclean_tip_separator: "|"
+treeclean_tip_label_format: species_chr_gene
+
+treeshrink_alpha: 0.005
+treeshrink_mode: all-genes
+treeshrink_protect_outgroups: true
