@@ -32,7 +32,18 @@ def parse_args() -> argparse.Namespace:
 
 
 def truthy(value: str) -> bool:
-    return str(value).strip().lower() in {"1", "true", "t", "yes", "y", "outgroup"}
+    text = str(value).strip().lower()
+
+    if text in {"", "0", "false", "f", "no", "n", "none", "na", "nan"}:
+        return False
+
+    if text in {"true", "t", "yes", "y", "outgroup"}:
+        return True
+
+    try:
+        return float(text) > 0
+    except ValueError:
+        return False
 
 
 def parse_species(tip: str, separator: str, label_format: str) -> str:
