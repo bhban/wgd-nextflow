@@ -330,7 +330,7 @@ p_redip <- suppressWarnings(
     geom_tiplab(
       aes(label = display_label),
       align = TRUE,
-      linesize = 0.3,
+      linesize = 0,
       size = opt$`tip-label-size`,
       fontface = 3,
       offset = opt$`tip-label-offset`
@@ -355,7 +355,9 @@ p_redip <- suppressWarnings(
     theme(
       legend.position = "none",
       plot.margin = margin(20, 80, 20, 20)
-    )
+    ) +
+    xlim(0, 25) +
+    theme_tree()
 )
 
 ggsave(
