@@ -1,3 +1,27 @@
+process NORMALISE_TIBERIUS_ANNOTATION {
+    tag { genome }
+
+    input:
+    tuple val(genome), path(gff), path(cds), path(pep)
+
+    output:
+    tuple val(genome),
+          path("${genome}.gff3"),
+          path("${genome}.cds"),
+          path("${genome}.pep")
+
+    script:
+    """
+    python ${projectDir}/scripts/normalise_tiberius_annotation.py \
+        --gff ${gff} \
+        --cds ${cds} \
+        --pep ${pep} \
+        --out-gff ${genome}.gff3 \
+        --out-cds ${genome}.cds \
+        --out-pep ${genome}.pep
+    """
+}
+
 process PRIMARY_TRANSCRIPT {
     tag { genome }
 
@@ -9,10 +33,17 @@ process PRIMARY_TRANSCRIPT {
     tuple val(genome), val(source), val(ploidy), path("${genome}.primary.pep"), path(gff), path(chr)
 
     script:
+    def skip_primary_filter_sources = ['helixer', 'tiberius']
+    
     def cmd =
-        source == 'helixer'
+        skip_primary_filter_sources.contains(source)
             ? """
               cp ${pep} ${genome}.primary.pep
+              """
+            : """
+              python ${projectDir}/scripts/primary_transcript.py \
+                  --pep ${pep} \
+                  --out ${genome}.primary.pep
               """
         : source == 'phytozome'
             ? """
