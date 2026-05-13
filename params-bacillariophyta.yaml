@@ -1,0 +1,44 @@
+# params-bacillariophyta.yaml
+
+# Run mode
+start_mode: full
+
+# Input metadata
+genomes: genomes.tsv
+
+# Input directories
+gff_dir: input/gff
+protein_dir: input/protein
+cds_dir: input/cds
+chr_dict_dir: input/chr_dict
+
+# File extensions
+ext:
+  gff: gff3
+  pep: pep.fa
+  cds: cds.fa
+
+# GENESPACE / OrthoFinder options
+run_external_orthofinder: false
+orthofinder_in_blk: true
+force_orthofinder: false
+rawOrthofinderDir: null
+blkSize: 5
+
+# No species tree for this run
+species_tree: null
+use_species_tree_for_orthofinder: false
+use_species_tree_for_alerax: false
+
+# Broad diatom run with Triparma as outgroup
+require_outgroup_og: true
+
+# Optional post-processing
+collapse_tandems: false
+tandem_max_ord_gap: 2
+
+# AleRax disabled
+run_alerax: false
+
+# Rediploidisation disabled
+run_rediploidisation: false
