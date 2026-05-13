@@ -19,12 +19,7 @@ protein_dir: "/exports/eddie/scratch/s2428892/nf-teleostei/input/protein"
 cds_dir: "/exports/eddie/scratch/s2428892/nf-teleostei/input/cds"
 chr_dict_dir: "/exports/eddie/scratch/s2428892/nf-teleostei/input/chr_dict"
 
-start_mode: 'redip'
-
-rediploidisation:
-  gene_trees_dir: "/exports/eddie/scratch/s2428892/nf-teleostei/results/post_genespace/iqtree_aa"
-  genespace_wd: "/exports/eddie/scratch/s2428892/nf-teleostei/results/workingDir"
-
+start_mode: 'full'
 
 annotation:
   run: false
