@@ -7,9 +7,9 @@ process NORMALISE_TIBERIUS_ANNOTATION {
 
     output:
     tuple val(genome), val(source), val(ploidy),
-          path("${genome}.gff3"),
-          path("${genome}.cds"),
-          path("${genome}.pep"),
+          path("${genome}.tiberius.gff3"),
+          path("${genome}.tiberius.cds"),
+          path("${genome}.tiberius.pep"),
           path(chr)
 
     script:
@@ -18,9 +18,13 @@ process NORMALISE_TIBERIUS_ANNOTATION {
         --gff ${gff} \
         --cds ${cds} \
         --pep ${pep} \
-        --out-gff ${genome}.gff3 \
-        --out-cds ${genome}.cds \
-        --out-pep ${genome}.pep
+        --out-gff ${genome}.tiberius.gff3 \
+        --out-cds ${genome}.tiberius.cds \
+        --out-pep ${genome}.tiberius.pep
+
+    test -s ${genome}.tiberius.gff3
+    test -s ${genome}.tiberius.cds
+    test -s ${genome}.tiberius.pep
     """
 }
 
