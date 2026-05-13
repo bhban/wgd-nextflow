@@ -488,20 +488,19 @@ process MATERIALISE_FINAL_TREE_DIRS {
     cp -a "${iqtree_dir}/." "\$outdir/"
     cp -f "${nt_aln}" "\$outdir/${final_unit}_NT.fasta"
 
-    # Standardise IQ-TREE filenames to the final unit name.
-    # This is important for pruned units, where the final published name
-    # may be ${unit}_trimmed but IQ-TREE generated files under ${unit}_iqtree.
     treefile=\$(find "\$outdir" -maxdepth 1 -name "*_iqtree.treefile" | sort | head -n 1 || true)
 
     if [ -n "\$treefile" ] && [ -s "\$treefile" ]; then
       old_prefix=\$(basename "\$treefile" _iqtree.treefile)
 
-      for f in "\$outdir"/"\${old_prefix}"_iqtree.*; do
-        if [ -e "\$f" ]; then
-          suffix="\${f##*"\${old_prefix}"_iqtree}"
-          cp -f "\$f" "\$outdir/${final_unit}_iqtree\${suffix}"
-        fi
-      done
+      if [ "\$old_prefix" != "${final_unit}" ]; then
+        for f in "\$outdir"/"\${old_prefix}"_iqtree.*; do
+          if [ -e "\$f" ]; then
+            suffix="\${f##*"\${old_prefix}"_iqtree}"
+            cp -f "\$f" "\$outdir/${final_unit}_iqtree\${suffix}"
+          fi
+        done
+      fi
     else
       echo "Could not find *_iqtree.treefile in ${iqtree_dir}" >&2
       exit 1
