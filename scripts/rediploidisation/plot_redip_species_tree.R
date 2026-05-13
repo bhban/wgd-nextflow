@@ -8,6 +8,7 @@ suppressPackageStartupMessages({
   library(readr)
   library(dplyr)
   library(stringr)
+  library(tidyr)
 })
 
 option_list <- list(
@@ -19,6 +20,8 @@ option_list <- list(
               help = "Optional annotation TSV with tip_label and Scientific_name columns."),
   make_option("--colors", type = "character", default = NULL,
               help = "Optional colours TSV with branch_id and color columns. Header optional."),
+  make_option("--circos-links", type = "character", default = NULL,
+              help = "Optional single circos links TSV file. Counts rows by redip_branch and labels branch nodes with duplication counts."),
   make_option("--output", type = "character", default = NULL,
               help = "Output plot path. Extension determines device where possible."),
   make_option("--width", type = "double", default = 8,
@@ -32,13 +35,15 @@ option_list <- list(
   make_option("--circle-stroke", type = "double", default = 0.5,
               help = "Branch marker circle stroke width."),
   make_option("--branch-number-size", type = "double", default = 4,
-              help = "Branch number label size."),
+              help = "Branch count label size."),
   make_option("--tip-label-size", type = "double", default = 5,
               help = "Tip label text size."),
   make_option("--tip-label-offset", type = "double", default = 0.4,
               help = "Tip label offset."),
-  make_option("--branch-label-offset", type = "double", default = 0.15,
-              help = "Offset for branch ID labels."),
+  make_option("--branch-label-x-offset", type = "double", default = 0,
+              help = "Horizontal offset for branch count labels."),
+  make_option("--branch-label-y-offset", type = "double", default = 0.28,
+              help = "Vertical offset for branch count labels. Positive values place labels above circles."),
   make_option("--prune-to-branch-species", type = "logical", default = TRUE,
               help = "Prune tree to species present in the branch definitions file.")
 )
@@ -234,6 +239,40 @@ read_tip_annotation <- function(path) {
     )
 }
 
+read_circos_branch_counts <- function(path = NULL) {
+  if (is.null(path) || path == "") {
+    return(NULL)
+  }
+
+  if (!file.exists(path)) {
+    stop("Circos links file does not exist: ", path)
+  }
+
+  x <- read_tsv(
+    path,
+    show_col_types = FALSE,
+    trim_ws = TRUE,
+    col_types = cols(.default = col_character())
+  )
+
+  if ("redip_branch" %in% names(x)) {
+    branch_col <- "redip_branch"
+  } else if (ncol(x) >= 8) {
+    branch_col <- names(x)[8]
+    warning(
+      "File does not contain a column named 'redip_branch'; using column 8 from: ",
+      basename(path)
+    )
+  } else {
+    stop("Circos links file has fewer than 8 columns: ", path)
+  }
+
+  x %>%
+    transmute(branch_id = as.character(.data[[branch_col]])) %>%
+    filter(!is.na(branch_id), branch_id != "") %>%
+    count(branch_id, name = "duplication_count")
+}
+
 get_branch_node <- function(tree, species_vec) {
   species_vec <- unique(species_vec)
 
@@ -290,6 +329,7 @@ if (is.null(annot)) {
 
 branch_ids <- unique(as.character(branch_defs$branch_id))
 branch_colors <- load_colors(opt$colors, branch_ids)
+circos_branch_counts <- read_circos_branch_counts(opt$`circos-links`)
 
 branch_nodes <- branch_defs %>%
   group_by(branch_id) %>%
@@ -299,7 +339,18 @@ branch_nodes <- branch_defs %>%
     node = get_branch_node(tr_plot, unlist(species)),
     color = unname(branch_colors[as.character(branch_id)])
   ) %>%
-  ungroup() %>%
+  ungroup()
+
+if (!is.null(circos_branch_counts)) {
+  branch_nodes <- branch_nodes %>%
+    left_join(circos_branch_counts, by = "branch_id") %>%
+    mutate(duplication_count = replace_na(duplication_count, 0L))
+} else {
+  branch_nodes <- branch_nodes %>%
+    mutate(duplication_count = NA_integer_)
+}
+
+branch_nodes <- branch_nodes %>%
   arrange(branch_sort_key(branch_id))
 
 p_base <- suppressWarnings(ggtree(tr_plot, size = 0.8))
@@ -317,12 +368,17 @@ tree_df <- p_base$data %>%
 circle_df <- tree_df %>%
   select(node, x, y, label, isTip) %>%
   inner_join(
-    branch_nodes %>% select(branch_id, node, color),
+    branch_nodes %>% select(branch_id, node, color, duplication_count),
     by = "node"
   ) %>%
   mutate(
-    label_x = x + opt$`branch-label-offset`,
-    label_y = y
+    label_x = x + opt$`branch-label-x-offset`,
+    label_y = y + opt$`branch-label-y-offset`,
+    node_label = if_else(
+      is.na(duplication_count),
+      as.character(branch_id),
+      as.character(duplication_count)
+    )
   )
 
 p_redip <- suppressWarnings(
@@ -343,13 +399,14 @@ p_redip <- suppressWarnings(
       color = "black",
       stroke = opt$`circle-stroke`
     ) +
-#    geom_text(
-#      data = circle_df,
-#      aes(x = label_x, y = label_y, label = branch_id),
-#      size = opt$`branch-number-size`,
-#      hjust = 0,
-#      vjust = 0.35
-#    ) +
+    geom_text(
+      data = circle_df,
+      aes(x = label_x, y = label_y, label = node_label),
+      size = opt$`branch-number-size`,
+      hjust = 0.5,
+      vjust = 0,
+      fontface = "bold"
+    ) +
     scale_fill_identity() +
     theme_tree2() +
     theme(
