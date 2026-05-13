@@ -343,20 +343,20 @@ p_redip <- suppressWarnings(
       color = "black",
       stroke = opt$`circle-stroke`
     ) +
-    geom_text(
-      data = circle_df,
-      aes(x = label_x, y = label_y, label = branch_id),
-      size = opt$`branch-number-size`,
-      hjust = 0,
-      vjust = 0.35
-    ) +
+#    geom_text(
+#      data = circle_df,
+#      aes(x = label_x, y = label_y, label = branch_id),
+#      size = opt$`branch-number-size`,
+#      hjust = 0,
+#      vjust = 0.35
+#    ) +
     scale_fill_identity() +
     theme_tree2() +
     theme(
       legend.position = "none",
       plot.margin = margin(20, 80, 20, 20)
     ) +
-    xlim(0, 25) +
+    xlim(0, 18) +
     theme_tree()
 )
 
