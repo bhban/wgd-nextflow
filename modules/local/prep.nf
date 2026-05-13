@@ -3,7 +3,7 @@ process NORMALISE_TIBERIUS_ANNOTATION {
 
     input:
     tuple val(genome), val(source), val(ploidy), path(gff), path(cds), path(pep), path(chr)
-    path normalise_tiberius_script_ch
+    path normalise_tiberius_script
 
     output:
     tuple val(genome), val(source), val(ploidy),
