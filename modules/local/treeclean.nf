@@ -488,11 +488,9 @@ process MATERIALISE_FINAL_TREE_DIRS {
     cp -a "${iqtree_dir}/." "\$outdir/"
     cp -f "${nt_aln}" "\$outdir/${final_unit}_NT.fasta"
 
-    /*
-     * Standardise IQ-TREE filenames to the final unit name.
-     * This is important for pruned units, where the final published name
-     * may be ${unit}_trimmed but IQ-TREE generated files under ${unit}_iqtree.
-     */
+    # Standardise IQ-TREE filenames to the final unit name.
+    # This is important for pruned units, where the final published name
+    # may be ${unit}_trimmed but IQ-TREE generated files under ${unit}_iqtree.
     treefile=\$(find "\$outdir" -maxdepth 1 -name "*_iqtree.treefile" | sort | head -n 1 || true)
 
     if [ -n "\$treefile" ] && [ -s "\$treefile" ]; then
@@ -509,13 +507,12 @@ process MATERIALISE_FINAL_TREE_DIRS {
       exit 1
     fi
 
-    cat > "\$outdir/${final_unit}.final_status.tsv" <<EOF
-original_unit	final_unit	final_status	source_iqtree_dir	source_nt_alignment
-${unit}	${final_unit}	${final_status}	${iqtree_dir}	${nt_aln}
-EOF
+    {
+      printf "original_unit\\tfinal_unit\\tfinal_status\\tsource_iqtree_dir\\tsource_nt_alignment\\n"
+      printf "%s\\t%s\\t%s\\t%s\\t%s\\n" "${unit}" "${final_unit}" "${final_status}" "${iqtree_dir}" "${nt_aln}"
+    } > "\$outdir/${final_unit}.final_status.tsv"
     """
 }
-
 
 process TREE_CLEANING_REPORT {
     tag "tree_cleaning_report"
