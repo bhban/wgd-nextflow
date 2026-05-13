@@ -38,12 +38,12 @@ option_list <- list(
               help = "Branch count label size."),
   make_option("--tip-label-size", type = "double", default = 5,
               help = "Tip label text size."),
-  make_option("--tip-label-offset", type = "double", default = 0.4,
+  make_option("--tip-label-offset", type = "double", default = 1,
               help = "Tip label offset."),
-  make_option("--branch-label-x-offset", type = "double", default = 0,
+  make_option("--branch-label-x-offset", type = "double", default = -0.1,
               help = "Horizontal offset for branch count labels."),
-  make_option("--branch-label-y-offset", type = "double", default = 0.28,
-              help = "Vertical offset for branch count labels. Positive values place labels above circles."),
+  make_option("--branch-label-y-offset", type = "double", default = 0.1,
+              help = "Vertical offset for branch count labels."),
   make_option("--prune-to-branch-species", type = "logical", default = TRUE,
               help = "Prune tree to species present in the branch definitions file.")
 )
@@ -413,7 +413,7 @@ p_redip <- suppressWarnings(
       legend.position = "none",
       plot.margin = margin(20, 80, 20, 20)
     ) +
-    xlim(0, 18) +
+    xlim(0, 15) +
     theme_tree()
 )
 
