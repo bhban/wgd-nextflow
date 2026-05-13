@@ -3,6 +3,7 @@ process NORMALISE_TIBERIUS_ANNOTATION {
 
     input:
     tuple val(genome), path(gff), path(cds), path(pep)
+    path normalise_tiberius_script
 
     output:
     tuple val(genome),
@@ -12,7 +13,7 @@ process NORMALISE_TIBERIUS_ANNOTATION {
 
     script:
     """
-    python ${projectDir}/scripts/normalise_tiberius_annotation.py \
+    python ${normalise_tiberius_script} \
         --gff ${gff} \
         --cds ${cds} \
         --pep ${pep} \
