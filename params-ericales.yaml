@@ -6,36 +6,37 @@ sif_paths:
   annevo: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/annevo_1.0.sif"
   gffutils: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/gffutils_1.0.sif"
   redip: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip_1.0.sif"
+  treeclean: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/treeclean_1.0.sif"
 
 genomes_tsv: "/exports/eddie/scratch/s2428892/nf-ericales/input/genomes_Prim.tsv"
 species_tree: "/exports/eddie/scratch/s2428892/nf-ericales/input/species_tree_Prim.nwk"
-
-working_dir: "workingDir"
-postdir: "post_genespace"
 
 gff_dir: "/exports/eddie/scratch/s2428892/nf-ericales/input/gff"
 protein_dir: "/exports/eddie/scratch/s2428892/nf-ericales/input/protein"
 cds_dir: "/exports/eddie/scratch/s2428892/nf-ericales/input/cds"
 chr_dict_dir: "/exports/eddie/scratch/s2428892/nf-ericales/input/chr_dict"
 
+start_mode: "genespace"
+existing_genespace_wd: "/exports/eddie/scratch/s2428892/nf-ericales/results/workingDir/workingDir"
 
-start_mode: "full"
 run_rediploidisation: true
+run_tree_cleaning: true
 
-annotation:
-  run: false
-
-existing_genespace_wd: null
-existing_orthofinder_dir: null
-
-force_orthofinder: false
-run_external_orthofinder: true
-use_species_tree_for_orthofinder: true
-
-genespace:
-  rawOrthofinderDir: ""
-  blkSize: 5
-  orthofinder_in_blk: true
+use_cleaned_gene_trees_for_redip: true
 
 require_outgroup_og: true
 collapse_tandems: true
+
+alignment_method: "macse_nt"
+
+treeclean_min_branch: 0.6
+treeclean_min_tips: 4
+treeclean_min_species: 4
+treeclean_require_outgroup: true
+
+treeclean_tip_separator: "|"
+treeclean_tip_label_format: "species_chr_gene"
+
+treeshrink_alpha: 0.005
+treeshrink_mode: "all-genes"
+treeshrink_protect_outgroups: true
