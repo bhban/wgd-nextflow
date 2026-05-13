@@ -678,7 +678,7 @@ workflow TREECLEAN {
             was_decomposed != 'true' && was_pruned != 'true'
         }
         .map { unit, fasta, was_decomposed, was_pruned ->
-            tuple(unit)
+            unit
         }
 
     /*
@@ -706,8 +706,9 @@ workflow TREECLEAN {
      */
     ch_passthrough_keyed = ch_final_passthrough_units
         .map { unit ->
-            def og = unit.replaceFirst(/^og_/, '')
-            tuple(og, unit)
+            def unit_id = unit instanceof List ? unit[0].toString() : unit.toString()
+            def og = unit_id.replaceFirst(/^og_/, '')
+            tuple(og, unit_id)
         }
 
     ch_passthrough_with_tree = ch_passthrough_keyed
