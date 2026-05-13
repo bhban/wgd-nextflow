@@ -1,7 +1,7 @@
 nextflow.enable.dsl=2
 
 include { RUN_ANNEVO; ANNEVO_GFF_TO_FASTA } from './modules/local/annotation'
-include { PRIMARY_TRANSCRIPT; FINALIZE_REPO_IDS } from './modules/local/prep'
+include { NORMALISE_TIBERIUS_ANNOTATION; PRIMARY_TRANSCRIPT; FINALIZE_REPO_IDS } from './modules/local/prep'
 include { STAGE_GENOMEREPO; PARSE_ANNOTATIONS_BY_SOURCE; MAKE_PARSE_DONE; VALIDATE_PARSE_OUTPUTS; VALIDATE_GENESPACE_RESULTS; ORTHOFINDER_OR_SKIP; RUN_GENESPACE } from './modules/local/genespace'
 include { PANGENES_PASS_FILTER; COLLAPSE_TANDEMS; WRITE_OG_FASTAS; MACSE_ALIGN_OG; MACSE_REPORT; MAFFT_ALIGN_AA; MAFFT_REPORT; IQTREE_NT_OG; IQTREE_NT_REPORT; IQTREE_AA_OG; IQTREE_AA_REPORT } from './modules/local/post_genespace'
 include { ALERAX_WORKFLOW } from './modules/local/alerax'
@@ -515,25 +515,27 @@ workflow {
                 def fasta = params.annotation?.run
                     ? resolveGenomeFasta(row.genome)
                     : null
-
+        
                 tuple(
                     row.genome,
                     row.source,
                     row.ploidy,
                     file("${params.gff_dir}/${row.genome}.${params.ext.gff}"),
+                    file("${params.cds_dir}/${row.genome}.${params.ext.cds}"),
                     file("${params.protein_dir}/${row.genome}.${params.ext.pep}"),
                     resolveChrDict(row.genome),
                     fasta
                 )
             }
 
-        cds_files_ch = Channel.fromPath("${params.cds_dir}/*.cds", checkIfExists: true).collect()
+        cds_files_ch = Channel.fromPath("${params.cds_dir}/*.${params.ext.cds}", checkIfExists: true).collect()
         protein_files_ch = Channel.fromPath("${params.protein_dir}/*.${params.ext.pep}", checkIfExists: true).collect()
 
         def orthofinder_species_tree_ch = (
             params.use_species_tree_for_orthofinder && species_tree_path
         ) ? Channel.value(file(species_tree_path, checkIfExists: true)) : Channel.value([])
 
+        normalise_tiberius_script_ch     = Channel.value(file('scripts/normalise_tiberius_annotation.py'))
         primary_transcript_script_ch     = Channel.value(file('scripts/primary_transcript.py'))
         apply_chr_dict_script_ch         = Channel.value(file('scripts/apply_chr_dict_to_gff.py'))
         finalize_repo_ids_script_ch      = Channel.value(file('scripts/finalize_repo_ids.py'))
@@ -552,48 +554,87 @@ workflow {
 
         if (params.start_mode == 'full') {
             def prep_input_ch
-
+        
             if (params.annotation?.run) {
                 if (params.annotation.tool != 'annevo') {
                     error "Unsupported annotation tool: ${params.annotation.tool}. Currently supported: annevo"
                 }
-
-                annevo_input_ch = genomes_ch.map { genome, source, ploidy, gff, pep, chr, fasta ->
+        
+                annevo_input_ch = genomes_ch.map { genome, source, ploidy, gff, cds, pep, chr, fasta ->
                     tuple(genome, source, ploidy, fasta, chr)
                 }
-
+        
                 annevo_gff_out = RUN_ANNEVO(annevo_input_ch)
                 annevo_fasta_out = ANNEVO_GFF_TO_FASTA(annevo_gff_out)
-
+        
                 prep_input_ch = annevo_fasta_out.map { genome, source, ploidy, gff, pep, chr, cds ->
                     tuple(genome, source, ploidy, gff, pep, chr)
                 }
-
+        
                 cds_files_ch = annevo_fasta_out
                     .map { genome, source, ploidy, gff, pep, chr, cds -> cds }
                     .collect()
-
+        
                 protein_files_ch = annevo_fasta_out
                     .map { genome, source, ploidy, gff, pep, chr, cds -> pep }
                     .collect()
-
+        
             } else {
-                prep_input_ch = genomes_ch.map { genome, source, ploidy, gff, pep, chr, fasta ->
+                raw_prep_input_ch = genomes_ch.map { genome, source, ploidy, gff, cds, pep, chr, fasta ->
+                    tuple(genome, source, ploidy, gff, cds, pep, chr)
+                }
+        
+                tiberius_input_ch = raw_prep_input_ch.filter { genome, source, ploidy, gff, cds, pep, chr ->
+                    source.toString().toLowerCase() == 'tiberius'
+                }
+        
+                non_tiberius_input_ch = raw_prep_input_ch.filter { genome, source, ploidy, gff, cds, pep, chr ->
+                    source.toString().toLowerCase() != 'tiberius'
+                }
+        
+                normalised_tiberius_ch = NORMALISE_TIBERIUS_ANNOTATION(
+                    tiberius_input_ch,
+                    normalise_tiberius_script_ch
+                )
+        
+                non_tiberius_for_primary_ch = non_tiberius_input_ch.map { genome, source, ploidy, gff, cds, pep, chr ->
                     tuple(genome, source, ploidy, gff, pep, chr)
                 }
+        
+                tiberius_for_primary_ch = normalised_tiberius_ch.map { genome, source, ploidy, gff, cds, pep, chr ->
+                    tuple(genome, source, ploidy, gff, pep, chr)
+                }
+        
+                prep_input_ch = non_tiberius_for_primary_ch.mix(tiberius_for_primary_ch)
+        
+                non_tiberius_cds_files_ch = non_tiberius_input_ch.map { genome, source, ploidy, gff, cds, pep, chr ->
+                    cds
+                }
+        
+                tiberius_cds_files_ch = normalised_tiberius_ch.map { genome, source, ploidy, gff, cds, pep, chr ->
+                    cds
+                }
+        
+                cds_files_ch = non_tiberius_cds_files_ch
+                    .mix(tiberius_cds_files_ch)
+                    .collect()
             }
-
+        
             primary_out = PRIMARY_TRANSCRIPT(
                 prep_input_ch,
                 primary_transcript_script_ch
             )
-
+        
             finalized_out = FINALIZE_REPO_IDS(
                 primary_out,
                 apply_chr_dict_script_ch,
                 finalize_repo_ids_script_ch
             )
-
+        
+            protein_files_ch = finalized_out
+                .map { genome, source, ploidy, gff, pep, chr -> pep }
+                .collect()
+        
             staged_repo_out = STAGE_GENOMEREPO(
                 finalized_out
                     .flatMap { genome, source, ploidy, gff, pep, chr ->
@@ -601,22 +642,22 @@ workflow {
                     }
                     .collect()
             )
-
+        
             genome_repo_publish_ch = staged_repo_out
-
+        
             parsed_out = PARSE_ANNOTATIONS_BY_SOURCE(
                 staged_repo_out,
                 genomes_tsv_ch,
                 parse_annotations_script_ch
             )
-
+        
             validated_out = VALIDATE_PARSE_OUTPUTS(
                 parsed_out[0],
                 parsed_out[1],
                 validate_parse_outputs_script_ch,
                 genome_ids_ch
             )
-
+        
         } else if (params.start_mode == 'parsed') {
             if (!params.existing_genespace_wd) {
                 error "When --start_mode parsed is used, --existing_genespace_wd must be provided"
