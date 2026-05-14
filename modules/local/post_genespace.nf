@@ -388,6 +388,7 @@ process IQTREE_NT_OG {
 
         if [ -s "\$tree_out" ] && [ -s "\$ufboot_out" ]; then
             echo "OK" > "\$status_out"
+            echo 0 > .exitcode
             exit 0
         fi
 
@@ -395,6 +396,7 @@ process IQTREE_NT_OG {
             fail_outputs
         fi
 
+        echo 0 > .exitcode
         exit 0
     }
 
@@ -402,6 +404,29 @@ process IQTREE_NT_OG {
 
     if [ ! -s ${nt} ] || [ "\$(tr -d '\r\n' < ${status})" != "OK" ]; then
         fail_outputs
+        echo "Skipped: missing NT alignment or upstream MACSE status was not OK" > "\$log_out"
+        echo 0 > .exitcode
+        trap - EXIT TERM INT USR1 USR2
+        exit 0
+    fi
+
+    gap_fraction=\$(awk '
+      /^>/ {next}
+      {
+        line = \$0
+        total += length(line)
+        gaps += gsub(/[-XxNn?]/, "", line)
+      }
+      END {
+        if (total == 0) print 1
+        else print gaps / total
+      }
+    ' ${nt})
+
+    if awk "BEGIN {exit !(\\\${gap_fraction} > 0.50)}"; then
+        fail_outputs
+        echo "Skipped: gap_fraction=\\\${gap_fraction}" > "\$log_out"
+        echo 0 > .exitcode
         trap - EXIT TERM INT USR1 USR2
         exit 0
     fi
@@ -426,6 +451,7 @@ process IQTREE_NT_OG {
         fail_outputs
     fi
 
+    echo 0 > .exitcode
     trap - EXIT TERM INT USR1 USR2
     exit 0
     """
@@ -498,6 +524,7 @@ process IQTREE_AA_OG {
 
         if [ -s "\$tree_out" ] && [ -s "\$ufboot_out" ]; then
             echo "OK" > "\$status_out"
+            echo 0 > .exitcode
             exit 0
         fi
 
@@ -505,6 +532,7 @@ process IQTREE_AA_OG {
             fail_outputs
         fi
 
+        echo 0 > .exitcode
         exit 0
     }
 
@@ -512,6 +540,29 @@ process IQTREE_AA_OG {
 
     if [ ! -s ${aa} ] || [ "\$(tr -d '\r\n' < ${status})" != "OK" ]; then
         fail_outputs
+        echo "Skipped: missing AA alignment or upstream MAFFT status was not OK" > "\$log_out"
+        echo 0 > .exitcode
+        trap - EXIT TERM INT USR1 USR2
+        exit 0
+    fi
+
+    gap_fraction=\$(awk '
+      /^>/ {next}
+      {
+        line = \$0
+        total += length(line)
+        gaps += gsub(/[-XxNn?]/, "", line)
+      }
+      END {
+        if (total == 0) print 1
+        else print gaps / total
+      }
+    ' ${aa})
+
+    if awk "BEGIN {exit !(\\\${gap_fraction} > 0.50)}"; then
+        fail_outputs
+        echo "Skipped: gap_fraction=\\\${gap_fraction}" > "\$log_out"
+        echo 0 > .exitcode
         trap - EXIT TERM INT USR1 USR2
         exit 0
     fi
@@ -536,6 +587,7 @@ process IQTREE_AA_OG {
         fail_outputs
     fi
 
+    echo 0 > .exitcode
     trap - EXIT TERM INT USR1 USR2
     exit 0
     """
