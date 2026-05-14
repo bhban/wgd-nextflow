@@ -423,9 +423,9 @@ process IQTREE_NT_OG {
       }
     ' ${nt})
 
-    if awk "BEGIN {exit !(\\\${gap_fraction} > 0.50)}"; then
+    if awk -v gf="\$gap_fraction" 'BEGIN {exit !(gf > 0.50)}'; then
         fail_outputs
-        echo "Skipped: gap_fraction=\\\${gap_fraction}" > "\$log_out"
+        echo "Skipped: gap_fraction=\$gap_fraction" > "\$log_out"
         echo 0 > .exitcode
         trap - EXIT TERM INT USR1 USR2
         exit 0
@@ -559,9 +559,9 @@ process IQTREE_AA_OG {
       }
     ' ${aa})
 
-    if awk "BEGIN {exit !(\\\${gap_fraction} > 0.50)}"; then
+    if awk -v gf="\$gap_fraction" 'BEGIN {exit !(gf > 0.50)}'; then
         fail_outputs
-        echo "Skipped: gap_fraction=\\\${gap_fraction}" > "\$log_out"
+        echo "Skipped: gap_fraction=\$gap_fraction" > "\$log_out"
         echo 0 > .exitcode
         trap - EXIT TERM INT USR1 USR2
         exit 0
