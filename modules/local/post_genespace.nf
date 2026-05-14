@@ -169,8 +169,8 @@ process MACSE_ALIGN_OG {
     on_exit() {
         rc=\$?
 
-        if [ -s "\$aa_out" ] && [ -s "\$nt_out" ]; then
-            echo "OK" > "\$status_out"
+        if [ -s "\$status_out" ] && grep -qx "OK" "\$status_out"; then
+            echo 0 > .exitcode
             exit 0
         fi
 
@@ -178,6 +178,7 @@ process MACSE_ALIGN_OG {
             fail_outputs
         fi
 
+        echo 0 > .exitcode
         exit 0
     }
 
@@ -202,6 +203,7 @@ process MACSE_ALIGN_OG {
         fail_outputs
     fi
 
+    echo 0 > .exitcode
     trap - EXIT TERM INT USR1 USR2
     exit 0
     """
@@ -286,8 +288,8 @@ process MAFFT_ALIGN_AA {
     on_exit() {
         rc=\$?
 
-        if [ -s "\$aa_out" ]; then
-            echo "OK" > "\$status_out"
+        if [ -s "\$status_out" ] && grep -qx "OK" "\$status_out"; then
+            echo 0 > .exitcode
             exit 0
         fi
 
@@ -295,6 +297,7 @@ process MAFFT_ALIGN_AA {
             fail_outputs
         fi
 
+        echo 0 > .exitcode
         exit 0
     }
 
@@ -316,6 +319,7 @@ process MAFFT_ALIGN_AA {
         fail_outputs
     fi
 
+    echo 0 > .exitcode
     trap - EXIT TERM INT USR1 USR2
     exit 0
     """
@@ -551,7 +555,7 @@ process IQTREE_AA_OG {
       {
         line = \$0
         total += length(line)
-        gaps += gsub(/[-XxNn?]/, "", line)
+        gaps += gsub(/[-Xx?*]/, "", line)
       }
       END {
         if (total == 0) print 1
