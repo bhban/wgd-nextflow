@@ -150,28 +150,38 @@ process MACSE_ALIGN_OG {
     export NUMEXPR_NUM_THREADS=${task.cpus}
     export MALLOC_ARENA_MAX=2
 
-    rm -f \
-      ${params.postdir}/macse/og_${og}.status \
-      ${params.postdir}/macse/og_${og}_AA.fasta \
-      ${params.postdir}/macse/og_${og}_NT.fasta \
-      ${params.postdir}/macse/og_${og}.log
+    aa_out="${params.postdir}/macse/og_${og}_AA.fasta"
+    nt_out="${params.postdir}/macse/og_${og}_NT.fasta"
+    status_out="${params.postdir}/macse/og_${og}.status"
+    log_out="${params.postdir}/macse/og_${og}.log"
 
-    echo "STARTED" > ${params.postdir}/macse/og_${og}.status
+    rm -f "\$status_out" "\$aa_out" "\$nt_out" "\$log_out"
+
+    echo "STARTED" > "\$status_out"
+
+    fail_outputs() {
+        rm -f "\$aa_out" "\$nt_out"
+        : > "\$aa_out"
+        : > "\$nt_out"
+        echo "FAIL" > "\$status_out"
+    }
 
     on_exit() {
         rc=\$?
-        if [ ! -s ${params.postdir}/macse/og_${og}.status ] || grep -qx 'STARTED' ${params.postdir}/macse/og_${og}.status; then
-            rm -f \
-              ${params.postdir}/macse/og_${og}_AA.fasta \
-              ${params.postdir}/macse/og_${og}_NT.fasta
 
-            : > ${params.postdir}/macse/og_${og}_AA.fasta
-            : > ${params.postdir}/macse/og_${og}_NT.fasta
-            echo "FAIL" > ${params.postdir}/macse/og_${og}.status
+        if [ -s "\$aa_out" ] && [ -s "\$nt_out" ]; then
+            echo "OK" > "\$status_out"
+            exit 0
         fi
-        exit \$rc
+
+        if [ ! -s "\$status_out" ] || grep -qx "STARTED" "\$status_out"; then
+            fail_outputs
+        fi
+
+        exit 0
     }
-    trap on_exit EXIT TERM INT
+
+    trap on_exit EXIT TERM INT USR1 USR2
 
     set +e
     /opt/conda/envs/macse/bin/java \
@@ -180,25 +190,20 @@ process MACSE_ALIGN_OG {
       -jar /opt/conda/envs/macse/share/macse-2.07-0/macse_v2.07.jar \
       -prog alignSequences \
       -seq ${fasta} \
-      -out_AA ${params.postdir}/macse/og_${og}_AA.fasta \
-      -out_NT ${params.postdir}/macse/og_${og}_NT.fasta \
-      > ${params.postdir}/macse/og_${og}.log 2>&1
+      -out_AA "\$aa_out" \
+      -out_NT "\$nt_out" \
+      > "\$log_out" 2>&1
     rc=\$?
     set -e
 
-    if [ \$rc -eq 0 ] && [ -s ${params.postdir}/macse/og_${og}_AA.fasta ] && [ -s ${params.postdir}/macse/og_${og}_NT.fasta ]; then
-        echo "OK" > ${params.postdir}/macse/og_${og}.status
+    if [ \$rc -eq 0 ] && [ -s "\$aa_out" ] && [ -s "\$nt_out" ]; then
+        echo "OK" > "\$status_out"
     else
-        rm -f \
-          ${params.postdir}/macse/og_${og}_AA.fasta \
-          ${params.postdir}/macse/og_${og}_NT.fasta
-
-        : > ${params.postdir}/macse/og_${og}_AA.fasta
-        : > ${params.postdir}/macse/og_${og}_NT.fasta
-        echo "FAIL" > ${params.postdir}/macse/og_${og}.status
+        fail_outputs
     fi
 
-    trap - EXIT TERM INT
+    trap - EXIT TERM INT USR1 USR2
+    exit 0
     """
 }
 
@@ -264,44 +269,55 @@ process MAFFT_ALIGN_AA {
     export NUMEXPR_NUM_THREADS=${task.cpus}
     export MALLOC_ARENA_MAX=2
 
-    rm -f \\
-      ${params.postdir}/mafft_aa/og_${og}.status \\
-      ${params.postdir}/mafft_aa/og_${og}_AA.fasta \\
-      ${params.postdir}/mafft_aa/og_${og}.log
+    aa_out="${params.postdir}/mafft_aa/og_${og}_AA.fasta"
+    status_out="${params.postdir}/mafft_aa/og_${og}.status"
+    log_out="${params.postdir}/mafft_aa/og_${og}.log"
 
-    echo "STARTED" > ${params.postdir}/mafft_aa/og_${og}.status
+    rm -f "\$status_out" "\$aa_out" "\$log_out"
+
+    echo "STARTED" > "\$status_out"
+
+    fail_outputs() {
+        rm -f "\$aa_out"
+        : > "\$aa_out"
+        echo "FAIL" > "\$status_out"
+    }
 
     on_exit() {
         rc=\$?
-        if [ ! -s ${params.postdir}/mafft_aa/og_${og}.status ] || grep -qx 'STARTED' ${params.postdir}/mafft_aa/og_${og}.status; then
-            rm -f ${params.postdir}/mafft_aa/og_${og}_AA.fasta
-            : > ${params.postdir}/mafft_aa/og_${og}_AA.fasta
-            echo "FAIL" > ${params.postdir}/mafft_aa/og_${og}.status
+
+        if [ -s "\$aa_out" ]; then
+            echo "OK" > "\$status_out"
+            exit 0
         fi
-        exit \$rc
+
+        if [ ! -s "\$status_out" ] || grep -qx "STARTED" "\$status_out"; then
+            fail_outputs
+        fi
+
+        exit 0
     }
-    trap on_exit EXIT TERM INT
+
+    trap on_exit EXIT TERM INT USR1 USR2
 
     set +e
-    ${params.mafft_bin} \\
-      ${params.mafft_opts} \\
-      --thread ${task.cpus} \\
-      ${fasta} \\
-      > ${params.postdir}/mafft_aa/og_${og}_AA.fasta \\
-      2> ${params.postdir}/mafft_aa/og_${og}.log
+    ${params.mafft_bin} \
+      ${params.mafft_opts} \
+      --thread ${task.cpus} \
+      ${fasta} \
+      > "\$aa_out" \
+      2> "\$log_out"
     rc=\$?
     set -e
 
-    if [ \$rc -eq 0 ] && [ -s ${params.postdir}/mafft_aa/og_${og}_AA.fasta ]; then
-        echo "OK" > ${params.postdir}/mafft_aa/og_${og}.status
+    if [ \$rc -eq 0 ] && [ -s "\$aa_out" ]; then
+        echo "OK" > "\$status_out"
     else
-        rm -f ${params.postdir}/mafft_aa/og_${og}_AA.fasta
-        : > ${params.postdir}/mafft_aa/og_${og}_AA.fasta
-        echo "FAIL" > ${params.postdir}/mafft_aa/og_${og}.status
-        exit 1
+        fail_outputs
     fi
 
-    trap - EXIT TERM INT
+    trap - EXIT TERM INT USR1 USR2
+    exit 0
     """
 }
 
@@ -349,14 +365,44 @@ process IQTREE_NT_OG {
 
     script:
     """
-    mkdir -p ${params.postdir}/iqtree_nt/og_${og}
+    outdir="${params.postdir}/iqtree_nt/og_${og}"
+    mkdir -p "\$outdir"
 
-    echo "STARTED" > ${params.postdir}/iqtree_nt/og_${og}/og_${og}.iqtree.status
+    status_out="\$outdir/og_${og}.iqtree.status"
+    tree_out="\$outdir/og_${og}_iqtree.treefile"
+    ufboot_out="\$outdir/og_${og}_iqtree.ufboot"
+    log_out="\$outdir/og_${og}.log"
+
+    rm -f "\$status_out" "\$tree_out" "\$ufboot_out" "\$log_out"
+
+    echo "STARTED" > "\$status_out"
+
+    fail_outputs() {
+        : > "\$tree_out"
+        : > "\$ufboot_out"
+        echo "FAIL" > "\$status_out"
+    }
+
+    on_exit() {
+        rc=\$?
+
+        if [ -s "\$tree_out" ] && [ -s "\$ufboot_out" ]; then
+            echo "OK" > "\$status_out"
+            exit 0
+        fi
+
+        if [ ! -s "\$status_out" ] || grep -qx "STARTED" "\$status_out"; then
+            fail_outputs
+        fi
+
+        exit 0
+    }
+
+    trap on_exit EXIT TERM INT USR1 USR2
 
     if [ ! -s ${nt} ] || [ "\$(tr -d '\r\n' < ${status})" != "OK" ]; then
-        : > ${params.postdir}/iqtree_nt/og_${og}/og_${og}_iqtree.treefile
-        : > ${params.postdir}/iqtree_nt/og_${og}/og_${og}_iqtree.ufboot
-        echo "FAIL" > ${params.postdir}/iqtree_nt/og_${og}/og_${og}.iqtree.status
+        fail_outputs
+        trap - EXIT TERM INT USR1 USR2
         exit 0
     fi
 
@@ -369,18 +415,19 @@ process IQTREE_NT_OG {
       -bb 1000 \
       -wbtl \
       -redo \
-      -pre ${params.postdir}/iqtree_nt/og_${og}/og_${og}_iqtree \
-      > ${params.postdir}/iqtree_nt/og_${og}/og_${og}.log 2>&1
+      -pre "\$outdir/og_${og}_iqtree" \
+      > "\$log_out" 2>&1
     rc=\$?
     set -e
 
-    if [ \$rc -eq 0 ] && [ -s ${params.postdir}/iqtree_nt/og_${og}/og_${og}_iqtree.treefile ] && [ -s ${params.postdir}/iqtree_nt/og_${og}/og_${og}_iqtree.ufboot ]; then
-        echo "OK" > ${params.postdir}/iqtree_nt/og_${og}/og_${og}.iqtree.status
+    if [ \$rc -eq 0 ] && [ -s "\$tree_out" ] && [ -s "\$ufboot_out" ]; then
+        echo "OK" > "\$status_out"
     else
-        : > ${params.postdir}/iqtree_nt/og_${og}/og_${og}_iqtree.treefile
-        : > ${params.postdir}/iqtree_nt/og_${og}/og_${og}_iqtree.ufboot
-        echo "FAIL" > ${params.postdir}/iqtree_nt/og_${og}/og_${og}.iqtree.status
+        fail_outputs
     fi
+
+    trap - EXIT TERM INT USR1 USR2
+    exit 0
     """
 }
 
@@ -428,14 +475,44 @@ process IQTREE_AA_OG {
 
     script:
     """
-    mkdir -p ${params.postdir}/iqtree_aa/og_${og}
+    outdir="${params.postdir}/iqtree_aa/og_${og}"
+    mkdir -p "\$outdir"
 
-    echo "STARTED" > ${params.postdir}/iqtree_aa/og_${og}/og_${og}.iqtree.status
+    status_out="\$outdir/og_${og}.iqtree.status"
+    tree_out="\$outdir/og_${og}_iqtree.treefile"
+    ufboot_out="\$outdir/og_${og}_iqtree.ufboot"
+    log_out="\$outdir/og_${og}.log"
+
+    rm -f "\$status_out" "\$tree_out" "\$ufboot_out" "\$log_out"
+
+    echo "STARTED" > "\$status_out"
+
+    fail_outputs() {
+        : > "\$tree_out"
+        : > "\$ufboot_out"
+        echo "FAIL" > "\$status_out"
+    }
+
+    on_exit() {
+        rc=\$?
+
+        if [ -s "\$tree_out" ] && [ -s "\$ufboot_out" ]; then
+            echo "OK" > "\$status_out"
+            exit 0
+        fi
+
+        if [ ! -s "\$status_out" ] || grep -qx "STARTED" "\$status_out"; then
+            fail_outputs
+        fi
+
+        exit 0
+    }
+
+    trap on_exit EXIT TERM INT USR1 USR2
 
     if [ ! -s ${aa} ] || [ "\$(tr -d '\r\n' < ${status})" != "OK" ]; then
-        : > ${params.postdir}/iqtree_aa/og_${og}/og_${og}_iqtree.treefile
-        : > ${params.postdir}/iqtree_aa/og_${og}/og_${og}_iqtree.ufboot
-        echo "FAIL" > ${params.postdir}/iqtree_aa/og_${og}/og_${og}.iqtree.status
+        fail_outputs
+        trap - EXIT TERM INT USR1 USR2
         exit 0
     fi
 
@@ -448,18 +525,19 @@ process IQTREE_AA_OG {
       -bb 1000 \
       -wbtl \
       -redo \
-      -pre ${params.postdir}/iqtree_aa/og_${og}/og_${og}_iqtree \
-      > ${params.postdir}/iqtree_aa/og_${og}/og_${og}.log 2>&1
+      -pre "\$outdir/og_${og}_iqtree" \
+      > "\$log_out" 2>&1
     rc=\$?
     set -e
 
-    if [ \$rc -eq 0 ] && [ -s ${params.postdir}/iqtree_aa/og_${og}/og_${og}_iqtree.treefile ] && [ -s ${params.postdir}/iqtree_aa/og_${og}/og_${og}_iqtree.ufboot ]; then
-        echo "OK" > ${params.postdir}/iqtree_aa/og_${og}/og_${og}.iqtree.status
+    if [ \$rc -eq 0 ] && [ -s "\$tree_out" ] && [ -s "\$ufboot_out" ]; then
+        echo "OK" > "\$status_out"
     else
-        : > ${params.postdir}/iqtree_aa/og_${og}/og_${og}_iqtree.treefile
-        : > ${params.postdir}/iqtree_aa/og_${og}/og_${og}_iqtree.ufboot
-        echo "FAIL" > ${params.postdir}/iqtree_aa/og_${og}/og_${og}.iqtree.status
+        fail_outputs
     fi
+
+    trap - EXIT TERM INT USR1 USR2
+    exit 0
     """
 }
 
