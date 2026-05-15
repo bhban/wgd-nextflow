@@ -127,7 +127,6 @@ process WRITE_OG_FASTAS {
 
 process MACSE_ALIGN_OG {
     tag { "og_${og}" }
-    array (params.array_size as int)
 
     input:
     tuple val(og), path(fasta)
@@ -243,7 +242,6 @@ process MACSE_REPORT {
 
 process MAFFT_ALIGN_AA {
     tag { "og_${og}" }
-    array (params.array_size as int)
 
     input:
     tuple val(og), path(fasta)
@@ -359,7 +357,6 @@ process MAFFT_REPORT {
 
 process IQTREE_NT_OG {
     tag { "og_${og}" }
-    array (params.array_size as int)
 
     input:
     tuple val(og), path(aa), path(nt), path(status), path(macse_log)
@@ -495,7 +492,6 @@ process IQTREE_NT_REPORT {
 
 process IQTREE_AA_OG {
     tag { "og_${og}" }
-    array (params.array_size as int)
 
     input:
     tuple val(og), path(aa), path(status), path(mafft_log)
