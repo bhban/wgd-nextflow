@@ -871,18 +871,20 @@ workflow {
                 error "--run_tree_cleaning requires --alignment_method macse_nt or both, because tree cleaning currently re-aligns CDS with MACSE"
             }
 
-            treeclean_out = TREECLEAN(
-                og_cds_fasta_ch,
-                iqtree_nt_out.map { og, iqtree_dir -> tuple(og, iqtree_dir) },
-                macse_out
-                    .filter { og, aa, nt, status, log ->
-                        status.text.trim() == 'OK'
-                    }
-                    .map { og, aa, nt, status, log ->
-                        tuple(og, nt)
-                    },
-                genomes_tsv_ch
-            )
+        treeclean_out = TREECLEAN(
+            og_cds_fasta_ch,
+            iqtree_nt_ok_ch.map { og, iqtree_dir ->
+                tuple(og, iqtree_dir)
+            },
+            macse_out
+                .filter { og, aa, nt, status, log ->
+                    status.text.trim() == 'OK'
+                }
+                .map { og, aa, nt, status, log ->
+                    tuple(og, nt)
+                },
+            genomes_tsv_ch
+        )
 
             treeclean_for_alerax_ch = treeclean_out.cleaned_for_alerax
             treeclean_for_redip_ch  = treeclean_out.cleaned_for_redip
