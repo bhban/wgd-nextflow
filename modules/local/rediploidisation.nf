@@ -33,7 +33,7 @@ PY
 
 
 process ROOT_GENE_TREE {
-    tag { "og_${og}" }
+    tag { og }
     array (params.array_size as int)
 
     input:
@@ -45,25 +45,25 @@ process ROOT_GENE_TREE {
 
     output:
     tuple val(og),
-          path("rediploidisation/rooted_trees/og_${og}.rooted.treefile"),
+          path("rediploidisation/rooted_trees/${og}.rooted.treefile"),
           optional: true,
           emit: rooted_trees
 
     tuple val(og),
-          path("rediploidisation/rooting_summaries/og_${og}.rooting_summary.tsv"),
+          path("rediploidisation/rooting_summaries/${og}.rooting_summary.tsv"),
           emit: summaries
 
     script:
     """
     mkdir -p rediploidisation/rooted_trees rediploidisation/rooting_summaries
 
-    test -s ${iqtree_dir}/og_${og}_iqtree.treefile
+    test -s ${iqtree_dir}/${og}_iqtree.treefile
 
     python ${root_script} \\
-        --tree ${iqtree_dir}/og_${og}_iqtree.treefile \\
+        --tree ${iqtree_dir}/${og}_iqtree.treefile \\
         --genomes-tsv ${genomes_tsv} \\
-        --output-tree rediploidisation/rooted_trees/og_${og}.rooted.treefile \\
-        --summary-tsv rediploidisation/rooting_summaries/og_${og}.rooting_summary.tsv \\
+        --output-tree rediploidisation/rooted_trees/${og}.rooted.treefile \\
+        --summary-tsv rediploidisation/rooting_summaries/${og}.rooting_summary.tsv \\
         --tip-separator '${redip_params.tip_separator}' \\
         --tree-format ${redip_params.gene_tree_format}
     """
