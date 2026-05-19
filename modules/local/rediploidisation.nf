@@ -327,6 +327,69 @@ process PLOT_REDIP_CIRCOS {
 }
 
 
+process PLOT_REDIP_SPECIES_TREE {
+    tag { "${species}.${plot_level}" }
+
+    input:
+    tuple val(species), val(plot_level), path(circos_links)
+    path species_tree
+    path branch_definitions
+    path plot_species_tree_script
+    val redip_params
+
+    output:
+    tuple val(species),
+          val(plot_level),
+          path("rediploidisation/species_tree_plots/${plot_level}/${species}.${plot_level}.redip_species_tree.png")
+
+    script:
+    def annotation_arg = redip_params.species_tree_annotation?.toString()?.trim()
+        ? "--annotation ${redip_params.species_tree_annotation}"
+        : ""
+
+    def colors_arg = redip_params.branch_colors?.toString()?.trim()
+        ? "--colors ${redip_params.branch_colors}"
+        : ""
+
+    def width = redip_params.species_tree_plot_width ?: 8
+    def height = redip_params.species_tree_plot_height ?: 6
+    def dpi = redip_params.species_tree_plot_dpi ?: 300
+    def circle_size = redip_params.species_tree_circle_size ?: 7
+    def circle_stroke = redip_params.species_tree_circle_stroke ?: 0.5
+    def branch_number_size = redip_params.species_tree_branch_number_size ?: 4
+    def tip_label_size = redip_params.species_tree_tip_label_size ?: 5
+    def tip_label_offset = redip_params.species_tree_tip_label_offset ?: 1
+    def branch_label_x_offset = redip_params.species_tree_branch_label_x_offset ?: 0.15
+    def branch_label_y_offset = redip_params.species_tree_branch_label_y_offset ?: 0.1
+    def prune_to_branch_species = redip_params.containsKey('species_tree_prune_to_branch_species')
+        ? redip_params.species_tree_prune_to_branch_species
+        : true
+
+    """
+    mkdir -p rediploidisation/species_tree_plots/${plot_level}
+
+    Rscript ${plot_species_tree_script} \
+        --species-tree ${species_tree} \
+        --branch-definitions ${branch_definitions}/${species}.branch_definitions.tsv \
+        --circos-links ${circos_links} \
+        --output rediploidisation/species_tree_plots/${plot_level}/${species}.${plot_level}.redip_species_tree.png \
+        --width ${width} \
+        --height ${height} \
+        --dpi ${dpi} \
+        --circle-size ${circle_size} \
+        --circle-stroke ${circle_stroke} \
+        --branch-number-size ${branch_number_size} \
+        --tip-label-size ${tip_label_size} \
+        --tip-label-offset ${tip_label_offset} \
+        --branch-label-x-offset ${branch_label_x_offset} \
+        --branch-label-y-offset ${branch_label_y_offset} \
+        --prune-to-branch-species ${prune_to_branch_species} \
+        ${annotation_arg} \
+        ${colors_arg}
+    """
+}
+
+
 process REDIP_REPORT {
     tag "redip_report"
 
@@ -443,6 +506,7 @@ workflow REDIPLOIDISATION {
     classify_script_ch = Channel.value(file('scripts/rediploidisation/classify.py'))
     links_script_ch = Channel.value(file('scripts/rediploidisation/make_links.py'))
     prep_script_ch = Channel.value(file('scripts/rediploidisation/prep_circos.py'))
+    plot_species_tree_script_ch = Channel.value(file('scripts/rediploidisation/plot_redip_species_tree.R'))
 
     EXTRACT_REDIP_SPECIES(genomes_tsv, redip_utils_ch, redip_params)
 
@@ -568,6 +632,14 @@ workflow REDIPLOIDISATION {
 
     PLOT_REDIP_CIRCOS(PREP_REDIP_CIRCOS.out)
 
+    PLOT_REDIP_SPECIES_TREE(
+        MAKE_REDIP_LINKS.out,
+        species_tree,
+        WRITE_BRANCH_DEFS.out,
+        plot_species_tree_script_ch,
+        redip_params
+    )
+
     classifications_ch = CLASSIFY_REDIP_EVENTS.out
         .map { species, mode, classification -> classification }
         .collect()
@@ -592,5 +664,6 @@ workflow REDIPLOIDISATION {
     circos_links = MAKE_REDIP_LINKS.out
     circos_inputs = PREP_REDIP_CIRCOS.out
     circos_plots = PLOT_REDIP_CIRCOS.out
+    species_tree_plots = PLOT_REDIP_SPECIES_TREE.out
     report = REDIP_REPORT.out
 }
