@@ -1,16 +1,31 @@
 nextflow.enable.dsl=2
 
+/*
+ * Rediploidisation workflow.
+ *
+ * This version supports:
+ *   - default recurrent-safe classification mode
+ *   - per-species text modes in genomes.tsv
+ *   - backward-compatible 1/0 rediploidisation values
+ *   - standard/recent/ancestral Circos layers
+ *   - complete and branch-specific Circos plots for each layer
+ */
+
 process EXTRACT_REDIP_SPECIES {
     tag "extract_redip_species"
 
     input:
     path genomes_tsv
     path redip_utils
+    val redip_params
 
     output:
-    path "rediploidisation/redip_species.txt"
+    path "rediploidisation/redip_species_modes.tsv", emit: modes
+    path "rediploidisation/redip_species.txt", emit: species
 
     script:
+    def classify_mode = redip_params.classify_mode ?: 'recurrent'
+
     """
     mkdir -p rediploidisation
 
@@ -20,13 +35,22 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path("${redip_utils}").parent))
 
-from redip_utils import read_redip_species_from_genomes_tsv
+from redip_utils import read_redip_species_modes_from_genomes_tsv
 
-species = read_redip_species_from_genomes_tsv("${genomes_tsv}")
+rows = read_redip_species_modes_from_genomes_tsv(
+    "${genomes_tsv}",
+    default_mode="${classify_mode}",
+)
 
+with open("rediploidisation/redip_species_modes.tsv", "w") as out:
+    out.write("species\tredip_mode\n")
+    for species, mode in rows:
+        out.write(f"{species}\t{mode}\n")
+
+# Kept for backward compatibility with earlier workflow code and quick manual checks.
 with open("rediploidisation/redip_species.txt", "w") as out:
-    for sp in species:
-        out.write(sp + "\\n")
+    for species, _mode in rows:
+        out.write(species + "\n")
 PY
     """
 }
@@ -59,12 +83,12 @@ process ROOT_GENE_TREE {
 
     test -s ${iqtree_dir}/og_${og}_iqtree.treefile
 
-    python ${root_script} \\
-        --tree ${iqtree_dir}/og_${og}_iqtree.treefile \\
-        --genomes-tsv ${genomes_tsv} \\
-        --output-tree rediploidisation/rooted_trees/og_${og}.rooted.treefile \\
-        --summary-tsv rediploidisation/rooting_summaries/og_${og}.rooting_summary.tsv \\
-        --tip-separator '${redip_params.tip_separator}' \\
+    python ${root_script} \
+        --tree ${iqtree_dir}/og_${og}_iqtree.treefile \
+        --genomes-tsv ${genomes_tsv} \
+        --output-tree rediploidisation/rooted_trees/og_${og}.rooted.treefile \
+        --summary-tsv rediploidisation/rooting_summaries/og_${og}.rooting_summary.tsv \
+        --tip-separator '${redip_params.tip_separator}' \
         --tree-format ${redip_params.gene_tree_format}
     """
 }
@@ -87,66 +111,98 @@ process WRITE_BRANCH_DEFS {
     """
     mkdir -p rediploidisation/branch_definitions
 
-    python ${branch_script} \\
-        --tree ${species_tree} \\
-        --genomes-tsv ${genomes_tsv} \\
-        --output-dir rediploidisation/branch_definitions \\
+    python ${branch_script} \
+        --tree ${species_tree} \
+        --genomes-tsv ${genomes_tsv} \
+        --output-dir rediploidisation/branch_definitions \
         --tree-format ${redip_params.species_tree_format}
     """
 }
 
 
 process CLASSIFY_REDIP_EVENTS {
-    tag { species }
+    tag { "${species}.${redip_mode}" }
     array (params.array_size as int)
 
     input:
-    tuple val(species), path(rooted_trees)
+    tuple val(species), val(redip_mode), path(rooted_trees)
     path genomes_tsv
     path classify_script
     path redip_utils
     val redip_params
 
     output:
-    tuple val(species), path("rediploidisation/classifications/${species}.redip_classification.tsv")
+    tuple val(species),
+          val(redip_mode),
+          path("rediploidisation/classifications/${species}.redip_classification.tsv")
 
     script:
     def tree_list = rooted_trees.collect { it.toString() }.join(' ')
+
+    def recent_grouping = redip_params.recent_grouping ?: 'auto'
+    def min_recent_groups = redip_params.min_recent_groups ?: 2
+    def write_lossy_singletons = redip_params.containsKey('write_lossy_singletons') ? redip_params.write_lossy_singletons : true
+    def min_ancestral_target_copies = redip_params.min_ancestral_target_copies
+
+    def mode_args = ""
+    if (redip_mode == 'standard') {
+        mode_args = ""
+    } else if (redip_mode == 'recurrent') {
+        mode_args = """
+            --recurrent-wgd
+            --recent-grouping ${recent_grouping}
+            --min-recent-groups ${min_recent_groups}
+        """
+    } else if (redip_mode == 'recurrent_lossy') {
+        def singleton_arg = write_lossy_singletons ? "--write-lossy-singletons" : ""
+        def min_anc_arg = min_ancestral_target_copies ? "--min-ancestral-target-copies ${min_ancestral_target_copies}" : ""
+        mode_args = """
+            --recurrent-wgd
+            --allow-ancestral-loss
+            --recent-grouping ${recent_grouping}
+            --min-recent-groups ${min_recent_groups}
+            ${min_anc_arg}
+            ${singleton_arg}
+        """
+    } else {
+        throw new IllegalArgumentException("Unknown redip_mode: ${redip_mode}")
+    }
 
     """
     mkdir -p rediploidisation/classifications
 
     : > ${species}.rooted_gene_trees.nwk
-    
+
     for tree in ${tree_list}; do
         tree_base=\$(basename "\$tree")
-    
+
         while IFS= read -r newick || [ -n "\$newick" ]; do
             [ -z "\$newick" ] && continue
-            printf "%s\\t%s\\n" "\$tree_base" "\$newick" >> ${species}.rooted_gene_trees.nwk
+            printf "%s\t%s\n" "\$tree_base" "\$newick" >> ${species}.rooted_gene_trees.nwk
         done < "\$tree"
     done
 
-    python ${classify_script} \\
-        --target-species ${species} \\
-        --treefile ${species}.rooted_gene_trees.nwk \\
-        --genomes-tsv ${genomes_tsv} \\
-        --output rediploidisation/classifications/${species}.redip_classification.tsv \\
-        --tip-separator '${redip_params.tip_separator}' \\
-        --label-format ${redip_params.label_format} \\
-        --copy-mode ${redip_params.copy_mode} \\
-        --required-copies ${redip_params.required_copies} \\
-        --min-tips ${redip_params.min_tips}
+    python ${classify_script} \
+        --target-species ${species} \
+        --treefile ${species}.rooted_gene_trees.nwk \
+        --genomes-tsv ${genomes_tsv} \
+        --output rediploidisation/classifications/${species}.redip_classification.tsv \
+        --tip-separator '${redip_params.tip_separator}' \
+        --label-format ${redip_params.label_format} \
+        --copy-mode ${redip_params.copy_mode} \
+        --required-copies ${redip_params.required_copies} \
+        --min-tips ${redip_params.min_tips} \
+        ${mode_args}
     """
 }
 
 
 process MAKE_REDIP_LINKS {
-    tag { species }
+    tag { "${species}.${plot_level}" }
     array (params.array_size as int)
 
     input:
-    tuple val(species), path(classification)
+    tuple val(species), val(redip_mode), val(plot_level), path(classification)
     path branch_definitions
     path genespace_wd
     path links_script
@@ -154,7 +210,9 @@ process MAKE_REDIP_LINKS {
     val redip_params
 
     output:
-    tuple val(species), path("rediploidisation/circos_links/${species}.circos_links.tsv")
+    tuple val(species),
+          val(plot_level),
+          path("rediploidisation/circos_links/${plot_level}/complete/${species}.${plot_level}.circos_links.tsv")
 
     script:
     def source = redip_params.positions_source ?: 'bed'
@@ -188,72 +246,83 @@ process MAKE_REDIP_LINKS {
     }
 
     """
-    mkdir -p rediploidisation/circos_links
+    mkdir -p rediploidisation/circos_links/${plot_level}/complete
 
-    python ${links_script} \\
-        --species ${species} \\
-        --classification-tsv ${classification} \\
-        ${position_arg} \\
-        --branch-definitions ${branch_definitions}/${species}.branch_definitions.tsv \\
-        --output rediploidisation/circos_links/${species}.circos_links.tsv \\
-        --tip-separator '${redip_params.tip_separator}' \\
-        --label-format ${redip_params.label_format} \\
-        --position-key-type ${redip_params.position_key_type} \\
-        --write-header \\
-        --include-metadata \\
-        --on-exists overwrite \\
+    python ${links_script} \
+        --species ${species} \
+        --classification-tsv ${classification} \
+        ${position_arg} \
+        --branch-definitions ${branch_definitions}/${species}.branch_definitions.tsv \
+        --output rediploidisation/circos_links/${plot_level}/complete/${species}.${plot_level}.circos_links.tsv \
+        --plot-level ${plot_level} \
+        --tip-separator '${redip_params.tip_separator}' \
+        --label-format ${redip_params.label_format} \
+        --position-key-type ${redip_params.position_key_type} \
+        --write-header \
+        --include-metadata \
+        --on-exists overwrite \
         --log-level INFO
     """
 }
 
 
 process PREP_REDIP_CIRCOS {
-    tag { species }
+    tag { "${species}.${plot_level}" }
     array (params.array_size as int)
 
     input:
-    tuple val(species), path(circos_links), path(chr_bed)
+    tuple val(species), val(plot_level), path(circos_links), path(chr_bed)
     path prep_script
     path redip_utils
 
     output:
-    tuple val(species), path("rediploidisation/circos_inputs/${species}")
+    tuple val(species),
+          val(plot_level),
+          path("rediploidisation/circos_inputs/${plot_level}/${species}")
 
     script:
     """
-    mkdir -p rediploidisation/circos_inputs
+    mkdir -p rediploidisation/circos_inputs/${plot_level}
 
     test -s ${circos_links}
     test -s ${chr_bed}
 
-    python ${prep_script} \\
-        --species ${species} \\
-        --circos-links ${circos_links} \\
-        --chr-bed ${chr_bed} \\
-        --output-dir rediploidisation/circos_inputs/${species}
+    python ${prep_script} \
+        --species ${species}.${plot_level} \
+        --circos-links ${circos_links} \
+        --chr-bed ${chr_bed} \
+        --output-dir rediploidisation/circos_inputs/${plot_level}/${species}
     """
 }
 
 
 process PLOT_REDIP_CIRCOS {
-    tag { species }
+    tag { "${species}.${plot_level}" }
     array (params.array_size as int)
 
     input:
-    tuple val(species), path(species_dir)
+    tuple val(species), val(plot_level), path(prep_dir)
 
     output:
-    tuple val(species), path("rediploidisation/circos_plots/${species}")
+    tuple val(species),
+          val(plot_level),
+          path("rediploidisation/circos_plots/${plot_level}/${species}")
 
     script:
     """
-    mkdir -p rediploidisation/circos_plots
+    mkdir -p rediploidisation/circos_plots/${plot_level}
 
-    cp -r ${species_dir} rediploidisation/circos_plots/${species}
+    cp -r ${prep_dir} rediploidisation/circos_plots/${plot_level}/${species}
 
-    cd rediploidisation/circos_plots/${species}
-
-    ${params.circos_bin} -conf circos.conf
+    find rediploidisation/circos_plots/${plot_level}/${species} \
+        -name circos.conf \
+        -print0 | while IFS= read -r -d '' conf; do
+            plot_dir=\$(dirname "\$conf")
+            (
+                cd "\$plot_dir"
+                ${params.circos_bin} -conf circos.conf
+            )
+        done
     """
 }
 
@@ -265,6 +334,7 @@ process REDIP_REPORT {
     path rooting_summaries
     path classifications
     path circos_links
+    path circos_inputs
 
     output:
     path "rediploidisation/report"
@@ -273,6 +343,7 @@ process REDIP_REPORT {
     def root_list = rooting_summaries.collect { it.toString() }.join(' ')
     def class_list = classifications.collect { it.toString() }.join(' ')
     def link_list = circos_links.collect { it.toString() }.join(' ')
+    def input_list = circos_inputs.collect { it.toString() }.join(' ')
 
     """
     mkdir -p rediploidisation/report
@@ -289,23 +360,70 @@ process REDIP_REPORT {
         done
     } > rediploidisation/report/rooting_summary.tsv
 
-    {
-        echo -e "species\\tclassification_rows"
-        for f in ${class_list}; do
-            species=\$(basename "\$f" .redip_classification.tsv)
-            n=\$(awk 'NR > 1 { count++ } END { print count + 0 }' "\$f")
-            echo -e "\${species}\\t\${n}"
-        done
-    } > rediploidisation/report/classification_summary.tsv
+    python - <<'PY'
+import csv
+from collections import Counter
+from pathlib import Path
 
-    {
-        echo -e "species\\tcircos_link_rows"
-        for f in ${link_list}; do
-            species=\$(basename "\$f" .circos_links.tsv)
-            n=\$(awk 'NR > 1 { count++ } END { print count + 0 }' "\$f")
-            echo -e "\${species}\\t\${n}"
-        done
-    } > rediploidisation/report/circos_links_summary.tsv
+class_files = """${class_list}""".split()
+link_files = """${link_list}""".split()
+input_dirs = """${input_list}""".split()
+
+report_dir = Path("rediploidisation/report")
+
+with open(report_dir / "classification_summary.tsv", "w", newline="") as out:
+    writer = csv.writer(out, delimiter="\t")
+    writer.writerow(["species", "event_level", "event_type", "loss_status", "rows"])
+    for path in class_files:
+        species = Path(path).name.replace(".redip_classification.tsv", "")
+        counts = Counter()
+        with open(path, newline="") as handle:
+            reader = csv.DictReader(handle, delimiter="\t")
+            for row in reader:
+                counts[(
+                    row.get("event_level", "standard"),
+                    row.get("event_type", "standard_exact_n"),
+                    row.get("loss_status", "complete"),
+                )] += 1
+        if not counts:
+            writer.writerow([species, "none", "none", "none", 0])
+        else:
+            for key, n in sorted(counts.items()):
+                writer.writerow([species, *key, n])
+
+with open(report_dir / "circos_links_summary.tsv", "w", newline="") as out:
+    writer = csv.writer(out, delimiter="\t")
+    writer.writerow(["species", "plot_level", "circos_link_rows"])
+    for path in link_files:
+        name = Path(path).name.replace(".circos_links.tsv", "")
+        if "." in name:
+            species, plot_level = name.rsplit(".", 1)
+        else:
+            species, plot_level = name, "unknown"
+        with open(path, newline="") as handle:
+            n = max(sum(1 for _ in handle) - 1, 0)
+        writer.writerow([species, plot_level, n])
+
+with open(report_dir / "circos_branch_summary.tsv", "w", newline="") as out:
+    writer = csv.writer(out, delimiter="\t")
+    writer.writerow(["species", "plot_level", "branch_id", "link_rows"])
+    for input_dir in input_dirs:
+        p = Path(input_dir)
+        species = p.name
+        plot_level = p.parent.name
+        summary = p / "branch_summary.tsv"
+        if not summary.exists():
+            continue
+        with open(summary, newline="") as handle:
+            reader = csv.DictReader(handle, delimiter="\t")
+            for row in reader:
+                writer.writerow([
+                    species,
+                    plot_level,
+                    row.get("branch_id", ""),
+                    row.get("link_rows", ""),
+                ])
+PY
     """
 }
 
@@ -326,12 +444,23 @@ workflow REDIPLOIDISATION {
     links_script_ch = Channel.value(file('scripts/rediploidisation/make_links.py'))
     prep_script_ch = Channel.value(file('scripts/rediploidisation/prep_circos.py'))
 
-    EXTRACT_REDIP_SPECIES(genomes_tsv, redip_utils_ch)
+    EXTRACT_REDIP_SPECIES(genomes_tsv, redip_utils_ch, redip_params)
 
-    redip_species_ch = EXTRACT_REDIP_SPECIES.out
-        .splitText()
-        .map { it.trim() }
-        .filter { it }
+    /*
+     * Parse per-species redip modes once, then collect them into a value channel.
+     * This avoids reusing the same queue channel for species names, classification
+     * inputs, and plot-level expansion. The old 1/0 values are already resolved
+     * to text modes by redip_utils.py before this TSV is written.
+     */
+    redip_species_modes_list_ch = EXTRACT_REDIP_SPECIES.out.modes
+        .splitCsv(header: true, sep: '\t')
+        .map { row -> tuple(row.species as String, row.redip_mode as String) }
+        .collect()
+
+    redip_species_ch = redip_species_modes_list_ch
+        .flatMap { modes ->
+            modes.collect { item -> item[0] }
+        }
 
     iqtree_tree_ch = iqtree_results.map { og, iqtree_dir ->
         tuple(og, iqtree_dir)
@@ -361,15 +490,17 @@ workflow REDIPLOIDISATION {
         redip_params
     )
 
-    classify_input_ch = redip_species_ch
+    classify_input_ch = redip_species_modes_list_ch
         .combine(rooted_trees_ch)
-        .map { row ->
-            def species = row[0]
-            def rooted_trees = (row.size() == 2 && row[1] instanceof List)
-                ? row[1]
-                : row[1..-1]
+        .flatMap { row ->
+            def modes = row[0]
+            def rooted_trees = row[1]
 
-            tuple(species, rooted_trees)
+            modes.collect { item ->
+                def species = item[0]
+                def mode = item[1]
+                tuple(species, mode, rooted_trees)
+            }
         }
 
     CLASSIFY_REDIP_EVENTS(
@@ -380,8 +511,35 @@ workflow REDIPLOIDISATION {
         redip_params
     )
 
+    plot_levels_ch = redip_species_modes_list_ch
+        .flatMap { modes ->
+            modes.collectMany { item ->
+                def species = item[0]
+                def mode = item[1]
+
+                if (mode == 'standard') {
+                    return [ tuple(species, mode, 'standard') ]
+                }
+
+                return [
+                    tuple(species, mode, 'standard'),
+                    tuple(species, mode, 'recent'),
+                    tuple(species, mode, 'ancestral')
+                ]
+            }
+        }
+
+    classifications_for_join_ch = CLASSIFY_REDIP_EVENTS.out
+        .map { species, mode, classification -> tuple(species, classification) }
+
+    links_input_ch = plot_levels_ch
+        .join(classifications_for_join_ch)
+        .map { species, mode, plot_level, classification ->
+            tuple(species, mode, plot_level, classification)
+        }
+
     MAKE_REDIP_LINKS(
-        CLASSIFY_REDIP_EVENTS.out,
+        links_input_ch,
         WRITE_BRANCH_DEFS.out,
         genespace_wd,
         links_script_ch,
@@ -398,6 +556,9 @@ workflow REDIPLOIDISATION {
 
     circos_links_with_chr_beds_ch = MAKE_REDIP_LINKS.out
         .join(chr_beds_ch)
+        .map { species, plot_level, links, chr_bed ->
+            tuple(species, plot_level, links, chr_bed)
+        }
 
     PREP_REDIP_CIRCOS(
         circos_links_with_chr_beds_ch,
@@ -408,17 +569,22 @@ workflow REDIPLOIDISATION {
     PLOT_REDIP_CIRCOS(PREP_REDIP_CIRCOS.out)
 
     classifications_ch = CLASSIFY_REDIP_EVENTS.out
-        .map { species, classification -> classification }
+        .map { species, mode, classification -> classification }
         .collect()
 
     circos_links_ch = MAKE_REDIP_LINKS.out
-        .map { species, links -> links }
+        .map { species, plot_level, links -> links }
         .collect()
 
-    REDIP_REPORT(rooting_summaries_ch, classifications_ch, circos_links_ch)
+    circos_inputs_ch = PREP_REDIP_CIRCOS.out
+        .map { species, plot_level, prep_dir -> prep_dir }
+        .collect()
+
+    REDIP_REPORT(rooting_summaries_ch, classifications_ch, circos_links_ch, circos_inputs_ch)
 
     emit:
-    redip_species = EXTRACT_REDIP_SPECIES.out
+    redip_species_modes = EXTRACT_REDIP_SPECIES.out.modes
+    redip_species = EXTRACT_REDIP_SPECIES.out.species
     rooted_trees = ROOT_GENE_TREE.out.rooted_trees
     rooting_summaries = ROOT_GENE_TREE.out.summaries
     branch_definitions = WRITE_BRANCH_DEFS.out
