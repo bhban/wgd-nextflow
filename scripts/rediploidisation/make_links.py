@@ -3,53 +3,40 @@
 """
 Adapted from Classify_oncorhynchus_mykiss_rediploidization_histories_2026_03_03.py
 (Written by Drew Larson)
+Convert rediploidisation classification rows into Circos link tables.
 
-Read the classification TSV produced by classify_redip_events.py, classify each
-row into the smallest matching rediploidization branch, look up genomic positions
-for the two target genes, and write a Circos links file.
+This script supports both the original standard-only classifier output and the
+new recurrent/lossy recurrent classifier output.
 
-Supports two tip-label styles:
-    species@gene_id
-    species|chr|gene_id
+Backward compatibility notes
+----------------------------
+Older classification TSVs had only these columns:
+    tree_file, tree_index, allowed_clade_index, num_tips_in_allowed_clade,
+    target_tips, sharing_species
 
-Branch definitions are supplied in a TSV file with two columns:
-    branch_id    species
+Those files are still accepted and are treated as:
+    event_level = standard
+    event_type = standard_exact_n
+    loss_status = complete
 
-Example branch-definitions TSV:
-    1   Oncorhynchus_mykiss
-    2   Oncorhynchus_mykiss
-    2   Oncorhynchus_kisutch
-    3   Oncorhynchus_mykiss
-    3   Oncorhynchus_kisutch
-    3   Salvelinus_alpinus
-    3   Salvelinus_leucomaenis
+New recurrent behaviour
+-----------------------
+--plot-level standard:
+    Links come from standard_exact_n rows and are coloured by that row's
+    sharing_species.
 
-Optional colors TSV format:
-    branch_id    color
+--plot-level recent:
+    Links come from recent_complete rows and are coloured by that recent row's
+    sharing_species.
 
-Example colors TSV:
-    1   color=245,235,39
-    2   color=248,149,64
-    3   color=204,71,120
+--plot-level ancestral:
+    Links still come from recent_complete rows, so the number and genomic
+    positions of links match the recent plot. Colours are taken from the
+    matching ancestral row from the same tree/clade. This means the ancestral
+    plot is a recolouring of recent ohnolog links by the older WGD signal.
 
-Position tables can use arbitrary column names, provided you specify them with:
-    --position-key-column
-    --position-chr-column
-    --position-start-column
-    --position-end-column
-
-For example, a table with columns:
-    ofID    genome    og    flag    id    chr    start    end    ord
-
-can be used with:
-    --position-key-column id
-    --position-chr-column chr
-    --position-start-column start
-    --position-end-column end
-    --position-species-column genome
-
-Key is usually the gene_id, but can also be the full tip label if you
-set --position-key-type full_label.
+recent_singleton_lossy rows are skipped by default because they are intended for
+quality-control/auditing, not Circos links.
 """
 
 from __future__ import annotations
@@ -61,6 +48,30 @@ import logging
 import sys
 from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Tuple
+
+
+OLD_CLASSIFICATION_COLUMNS = [
+    "tree_file",
+    "tree_index",
+    "allowed_clade_index",
+    "num_tips_in_allowed_clade",
+    "target_tips",
+    "sharing_species",
+]
+
+NEW_CLASSIFICATION_COLUMNS = [
+    "tree_file",
+    "tree_index",
+    "event_level",
+    "event_type",
+    "loss_status",
+    "allowed_clade_index",
+    "num_tips_in_allowed_clade",
+    "num_target_tips_in_allowed_clade",
+    "event_index",
+    "target_tips",
+    "sharing_species",
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -83,6 +94,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--branch-definitions", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--colors", default=None)
+
+    parser.add_argument(
+        "--plot-level",
+        choices=["standard", "recent", "ancestral", "all"],
+        default="standard",
+        help=(
+            "Which biological layer to write. For ancestral plots, link endpoints "
+            "come from recent_complete rows but colours come from the matching "
+            "ancestral row."
+        ),
+    )
+    parser.add_argument(
+        "--skip-lossy-singletons",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Skip recent_singleton_lossy rows. This is the default because these "
+            "rows are useful for auditing but should not be used as Circos links."
+        ),
+    )
 
     parser.add_argument("--tip-separator", default="@")
     parser.add_argument(
@@ -199,15 +230,7 @@ def extract_position_key(
 
 
 def resolve_positions_source(args: argparse.Namespace) -> tuple[str, str]:
-    """
-    Return:
-        path, source_type
-
-    source_type is one of:
-        bed
-        pangenes
-        table
-    """
+    """Return (path, source_type), where source_type is bed, pangenes, or table."""
     if args.positions:
         path = Path(args.positions)
 
@@ -216,16 +239,12 @@ def resolve_positions_source(args: argparse.Namespace) -> tuple[str, str]:
 
         if args.position_format == "bed":
             return str(path), "bed"
-
         if args.position_format == "pangenes":
             return str(path), "pangenes"
-
         if args.position_format == "table":
             return str(path), "table"
-
         if path.name.endswith(".bed") or path.name.endswith(".bed.gz"):
             return str(path), "bed"
-
         return str(path), "table"
 
     if not args.species:
@@ -241,7 +260,6 @@ def resolve_positions_source(args: argparse.Namespace) -> tuple[str, str]:
             pangenes_dir / f"{args.species}.tsv.gz",
             pangenes_dir / f"{args.species}.tsv",
         ]
-
         for candidate in candidates:
             if candidate.exists():
                 return str(candidate), "pangenes"
@@ -252,7 +270,6 @@ def resolve_positions_source(args: argparse.Namespace) -> tuple[str, str]:
             bed_dir / f"{args.species}.bed",
             bed_dir / f"{args.species}.bed.gz",
         ]
-
         for candidate in candidates:
             if candidate.exists():
                 return str(candidate), "bed"
@@ -278,6 +295,10 @@ def load_branch_definitions(path: str) -> Dict[str, set[str]]:
                     f"Branch-definitions file '{path}' has fewer than 2 columns "
                     f"on line {line_number}."
                 )
+
+            # Header is allowed for convenience, but older files had no header.
+            if line_number == 1 and row[0].strip().lower() in {"branch_id", "branch", "id"}:
+                continue
 
             branch_id = row[0].strip()
             species = row[1].strip()
@@ -342,6 +363,8 @@ def load_colors(path: str | None, branch_ids: Sequence[str]) -> Dict[str, str]:
         for line_number, row in enumerate(reader, start=1):
             if not row or row[0].startswith("#"):
                 continue
+            if line_number == 1 and row[0].strip().lower() in {"branch_id", "branch", "id"}:
+                continue
 
             if len(row) < 2:
                 raise ValueError(
@@ -384,12 +407,7 @@ def add_position(
             f"on line {line_number}."
         )
 
-    new_value = {
-        "chr": chrom,
-        "start": start,
-        "end": end,
-        "species": species,
-    }
+    new_value = {"chr": chrom, "start": start, "end": end, "species": species}
 
     if key in pos_dict:
         if pos_dict[key] != new_value:
@@ -416,7 +434,6 @@ def load_table_positions(
     with open_text_auto(path) as handle:
         if has_header:
             reader = csv.DictReader(handle, delimiter="\t")
-
             if reader.fieldnames is None:
                 raise ValueError(f"Positions file '{path}' appears to have no header.")
 
@@ -442,20 +459,16 @@ def load_table_positions(
                     source_path=path,
                     line_number=line_number,
                 )
-
         else:
             reader = csv.reader(handle, delimiter="\t")
-
             for line_number, row in enumerate(reader, start=1):
                 if not row or row[0].startswith("#"):
                     continue
-
                 if len(row) < 4:
                     raise ValueError(
                         f"Positions file '{path}' has fewer than 4 columns "
                         f"on line {line_number}."
                     )
-
                 add_position(
                     pos_dict=pos_dict,
                     key=row[0].strip(),
@@ -479,16 +492,13 @@ def load_bed_positions(path: str, species: str | None = None) -> Dict[str, Dict[
 
     with open_text_auto(path) as handle:
         reader = csv.reader(handle, delimiter="\t")
-
         for line_number, row in enumerate(reader, start=1):
             if not row or row[0].startswith("#"):
                 continue
-
             if len(row) < 4:
                 raise ValueError(
                     f"BED file '{path}' has fewer than 4 columns on line {line_number}."
                 )
-
             add_position(
                 pos_dict=pos_dict,
                 key=row[3].strip(),
@@ -518,10 +528,8 @@ def load_pangenes_positions(path: str) -> Dict[str, Dict[str, str]]:
     )
 
 
-def classify_species_set(
-    species_set: set[str],
-    branch_to_species: Dict[str, set[str]],
-) -> str:
+def classify_species_set(species_set: set[str], branch_to_species: Dict[str, set[str]]) -> str:
+    """Assign sharing_species to the smallest matching redip branch."""
     for branch_id in sorted(branch_to_species.keys(), key=branch_sort_key):
         if species_set.issubset(branch_to_species[branch_id]):
             return branch_id
@@ -532,51 +540,205 @@ def classify_species_set(
     )
 
 
+def split_csv_field(value: str) -> list[str]:
+    return [x.strip() for x in str(value).split(",") if x.strip()]
+
+
+def normalise_classification_row(row: Dict[str, str]) -> Dict[str, str]:
+    """Fill recurrent columns for old standard-only classifier outputs."""
+    out = {key: (value or "") for key, value in row.items()}
+
+    target_tips = split_csv_field(out.get("target_tips", ""))
+
+    out.setdefault("event_level", "standard")
+    out.setdefault("event_type", "standard_exact_n")
+    out.setdefault("loss_status", "complete")
+    out.setdefault("event_index", "1")
+    out.setdefault("num_target_tips_in_allowed_clade", str(len(target_tips)))
+
+    if not out["event_level"]:
+        out["event_level"] = "standard"
+    if not out["event_type"]:
+        out["event_type"] = "standard_exact_n"
+    if not out["loss_status"]:
+        out["loss_status"] = "complete"
+    if not out["event_index"]:
+        out["event_index"] = "1"
+    if not out["num_target_tips_in_allowed_clade"]:
+        out["num_target_tips_in_allowed_clade"] = str(len(target_tips))
+
+    return out
+
+
+def get_input_rows(classification_path: str, no_header: bool) -> list[Dict[str, str]]:
+    """Load standard-only or recurrent classification rows."""
+    rows: list[Dict[str, str]] = []
+
+    with open(classification_path, "r", newline="") as handle:
+        if no_header:
+            reader = csv.reader(handle, delimiter="\t")
+            for line_number, row in enumerate(reader, start=1):
+                if not row:
+                    continue
+                if len(row) >= len(NEW_CLASSIFICATION_COLUMNS):
+                    row_dict = dict(zip(NEW_CLASSIFICATION_COLUMNS, row[:len(NEW_CLASSIFICATION_COLUMNS)]))
+                elif len(row) >= len(OLD_CLASSIFICATION_COLUMNS):
+                    row_dict = dict(zip(OLD_CLASSIFICATION_COLUMNS, row[:len(OLD_CLASSIFICATION_COLUMNS)]))
+                else:
+                    raise ValueError(
+                        f"Classification file '{classification_path}' has too few "
+                        f"columns on line {line_number}."
+                    )
+                rows.append(normalise_classification_row(row_dict))
+        else:
+            reader = csv.DictReader(handle, delimiter="\t")
+            if reader.fieldnames is None:
+                raise ValueError(
+                    f"Classification file '{classification_path}' appears to have no header."
+                )
+
+            fields = set(reader.fieldnames)
+            if set(NEW_CLASSIFICATION_COLUMNS).issubset(fields):
+                expected = NEW_CLASSIFICATION_COLUMNS
+            elif set(OLD_CLASSIFICATION_COLUMNS).issubset(fields):
+                expected = OLD_CLASSIFICATION_COLUMNS
+            else:
+                required = sorted(set(OLD_CLASSIFICATION_COLUMNS) - fields)
+                raise ValueError(
+                    f"Classification file '{classification_path}' is missing required "
+                    f"columns for old or new format. Missing old-format columns: "
+                    f"{', '.join(required)}"
+                )
+
+            for row in reader:
+                rows.append(normalise_classification_row({col: (row.get(col) or "") for col in expected}))
+
+    return rows
+
+
+def clade_key(row: Dict[str, str]) -> tuple[str, str, str]:
+    return (
+        row.get("tree_file", ""),
+        row.get("tree_index", ""),
+        row.get("allowed_clade_index", ""),
+    )
+
+
+def select_link_specs(
+    rows: list[Dict[str, str]],
+    plot_level: str,
+    skip_lossy_singletons: bool,
+    strict: bool,
+) -> list[tuple[Dict[str, str], Dict[str, str]]]:
+    """
+    Return pairs of (endpoint_row, colour_row).
+
+    endpoint_row supplies target_tips and genomic coordinates.
+    colour_row supplies sharing_species, redip_branch, and colour.
+    """
+    if skip_lossy_singletons:
+        rows = [row for row in rows if row.get("event_type") != "recent_singleton_lossy"]
+
+    if plot_level == "standard":
+        return [
+            (row, row)
+            for row in rows
+            if row.get("event_level") == "standard"
+        ]
+
+    if plot_level == "recent":
+        return [
+            (row, row)
+            for row in rows
+            if row.get("event_level") == "recent"
+            and row.get("event_type") == "recent_complete"
+        ]
+
+    if plot_level == "all":
+        return [
+            (row, row)
+            for row in rows
+            if row.get("event_type") != "recent_singleton_lossy"
+        ]
+
+    if plot_level != "ancestral":
+        raise ValueError(f"Unknown plot level: {plot_level}")
+
+    ancestral_by_clade: dict[tuple[str, str, str], Dict[str, str]] = {}
+    for row in rows:
+        if row.get("event_level") != "ancestral":
+            continue
+        key = clade_key(row)
+        if key in ancestral_by_clade:
+            handle_error(
+                "Multiple ancestral rows found for tree/clade "
+                f"{key}. Keeping the first row for ancestral colouring.",
+                strict,
+            )
+            continue
+        ancestral_by_clade[key] = row
+
+    specs: list[tuple[Dict[str, str], Dict[str, str]]] = []
+    for row in rows:
+        if row.get("event_level") != "recent" or row.get("event_type") != "recent_complete":
+            continue
+        key = clade_key(row)
+        ancestral = ancestral_by_clade.get(key)
+        if ancestral is None:
+            handle_error(
+                "No matching ancestral row found for recent row from tree/clade "
+                f"{key}; skipping this link in ancestral plot.",
+                strict,
+            )
+            continue
+        specs.append((row, ancestral))
+
+    return specs
+
+
+def validate_two_tip_link(row: Dict[str, str]) -> tuple[str, str, str]:
+    target_tips_field = row.get("target_tips", "").strip()
+    target_tips = split_csv_field(target_tips_field)
+    if len(target_tips) != 2:
+        raise ValueError(
+            f"Expected exactly 2 target tips for a Circos link, found "
+            f"{len(target_tips)}: '{target_tips_field}'"
+        )
+    return target_tips[0], target_tips[1], target_tips_field
+
+
 def build_output_row(
-    row_dict: Dict[str, str],
+    endpoint_row: Dict[str, str],
+    colour_row: Dict[str, str],
     pos_dict: Dict[str, Dict[str, str]],
     branch_to_species: Dict[str, set[str]],
     color_dict: Dict[str, str],
     tip_separator: str,
     label_format: str,
     position_key_type: str,
+    plot_level: str,
     include_metadata: bool,
 ) -> List[str]:
-    target_tips_field = row_dict["target_tips"].strip()
-    sharing_species_field = row_dict["sharing_species"].strip()
+    tip1, tip2, target_tips_field = validate_two_tip_link(endpoint_row)
 
-    target_tips = [x.strip() for x in target_tips_field.split(",") if x.strip()]
-    if len(target_tips) != 2:
-        raise ValueError(
-            f"Expected exactly 2 target tips, found {len(target_tips)}: "
-            f"'{target_tips_field}'"
-        )
-
-    parsed_tip1 = parse_tip_label(target_tips[0], tip_separator, label_format)
-    parsed_tip2 = parse_tip_label(target_tips[1], tip_separator, label_format)
+    parsed_tip1 = parse_tip_label(tip1, tip_separator, label_format)
+    parsed_tip2 = parse_tip_label(tip2, tip_separator, label_format)
 
     tip_species1 = parsed_tip1["species"]
     tip_species2 = parsed_tip2["species"]
 
-    sharing_species = {x.strip() for x in sharing_species_field.split(",") if x.strip()}
-    if not sharing_species:
-        raise ValueError("sharing_species field is empty.")
+    colour_sharing_species_field = colour_row.get("sharing_species", "").strip()
+    colour_sharing_species = {
+        x.strip() for x in colour_sharing_species_field.split(",") if x.strip()
+    }
+    if not colour_sharing_species:
+        raise ValueError("Colour-source sharing_species field is empty.")
 
-    redip_branch = classify_species_set(sharing_species, branch_to_species)
+    redip_branch = classify_species_set(colour_sharing_species, branch_to_species)
     color = color_dict[redip_branch]
 
-    key1 = extract_position_key(
-        tip_label=target_tips[0],
-        tip_separator=tip_separator,
-        label_format=label_format,
-        position_key_type=position_key_type,
-    )
-    key2 = extract_position_key(
-        tip_label=target_tips[1],
-        tip_separator=tip_separator,
-        label_format=label_format,
-        position_key_type=position_key_type,
-    )
+    key1 = extract_position_key(tip1, tip_separator, label_format, position_key_type)
+    key2 = extract_position_key(tip2, tip_separator, label_format, position_key_type)
 
     if key1 not in pos_dict:
         raise ValueError(f"Position key '{key1}' was not found in the positions table.")
@@ -591,7 +753,6 @@ def build_output_row(
             f"Species mismatch for key '{key1}': positions file has "
             f"'{pos_species1}', tip label has '{tip_species1}'."
         )
-
     if pos_species2 and pos_species2 != tip_species2:
         raise ValueError(
             f"Species mismatch for key '{key2}': positions file has "
@@ -611,63 +772,26 @@ def build_output_row(
     if include_metadata:
         output_row.extend([
             redip_branch,
-            row_dict.get("tree_file", ""),
-            row_dict.get("tree_index", ""),
-            row_dict.get("allowed_clade_index", ""),
-            row_dict.get("num_tips_in_allowed_clade", ""),
+            plot_level,
+            endpoint_row.get("event_level", ""),
+            endpoint_row.get("event_type", ""),
+            endpoint_row.get("event_index", ""),
+            colour_row.get("event_level", ""),
+            colour_row.get("event_type", ""),
+            colour_row.get("loss_status", ""),
+            endpoint_row.get("tree_file", ""),
+            endpoint_row.get("tree_index", ""),
+            endpoint_row.get("allowed_clade_index", ""),
+            endpoint_row.get("num_tips_in_allowed_clade", ""),
+            endpoint_row.get("num_target_tips_in_allowed_clade", ""),
             target_tips_field,
-            sharing_species_field,
+            tip1,
+            tip2,
+            endpoint_row.get("sharing_species", ""),
+            colour_sharing_species_field,
         ])
 
     return output_row
-
-
-def get_input_rows(
-    classification_path: str,
-    no_header: bool,
-) -> Iterable[Dict[str, str]]:
-    expected_columns = [
-        "tree_file",
-        "tree_index",
-        "allowed_clade_index",
-        "num_tips_in_allowed_clade",
-        "target_tips",
-        "sharing_species",
-    ]
-
-    with open(classification_path, "r", newline="") as handle:
-        if no_header:
-            reader = csv.reader(handle, delimiter="\t")
-
-            for line_number, row in enumerate(reader, start=1):
-                if not row:
-                    continue
-
-                if len(row) < 6:
-                    raise ValueError(
-                        f"Classification file '{classification_path}' has fewer than "
-                        f"6 columns on line {line_number}."
-                    )
-
-                yield dict(zip(expected_columns, row[:6]))
-
-        else:
-            reader = csv.DictReader(handle, delimiter="\t")
-
-            if reader.fieldnames is None:
-                raise ValueError(
-                    f"Classification file '{classification_path}' appears to have no header."
-                )
-
-            missing = [col for col in expected_columns if col not in reader.fieldnames]
-            if missing:
-                raise ValueError(
-                    f"Classification file '{classification_path}' is missing required "
-                    f"columns: {', '.join(missing)}"
-                )
-
-            for row in reader:
-                yield {col: (row[col] or "") for col in expected_columns}
 
 
 def prepare_output_file(path: Path, on_exists: str) -> str:
@@ -678,8 +802,33 @@ def prepare_output_file(path: Path, on_exists: str) -> str:
             return "w"
         if on_exists == "append":
             return "a"
-
     return "w"
+
+
+def output_header(include_metadata: bool) -> list[str]:
+    header = ["chr1", "start1", "end1", "chr2", "start2", "end2", "color"]
+    if include_metadata:
+        header.extend([
+            "redip_branch",
+            "plot_level",
+            "link_source_event_level",
+            "link_source_event_type",
+            "link_source_event_index",
+            "colour_source_event_level",
+            "colour_source_event_type",
+            "colour_source_loss_status",
+            "tree_file",
+            "tree_index",
+            "allowed_clade_index",
+            "num_tips_in_allowed_clade",
+            "num_target_tips_in_allowed_clade",
+            "target_tips",
+            "link_tip1",
+            "link_tip2",
+            "sharing_species",
+            "colour_sharing_species",
+        ])
+    return header
 
 
 def write_rows(
@@ -690,108 +839,91 @@ def write_rows(
     mode: str,
 ) -> int:
     rows = list(rows)
+    out_path = Path(output_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    header = ["chr1", "start1", "end1", "chr2", "start2", "end2", "color"]
-
-    if include_metadata:
-        header.extend([
-            "redip_branch",
-            "tree_file",
-            "tree_index",
-            "allowed_clade_index",
-            "num_tips_in_allowed_clade",
-            "target_tips",
-            "sharing_species",
-        ])
-
-    should_write_header = write_header and (
-        mode == "w"
-        or not Path(output_path).exists()
-        or Path(output_path).stat().st_size == 0
-    )
+    should_write_header = False
+    if write_header:
+        if mode == "w":
+            should_write_header = True
+        elif mode == "a":
+            if (not out_path.exists()) or out_path.stat().st_size == 0:
+                should_write_header = True
 
     with open(output_path, mode, newline="") as handle:
         writer = csv.writer(handle, delimiter="\t")
-
         if should_write_header:
-            writer.writerow(header)
-
-        for row in rows:
-            writer.writerow(row)
+            writer.writerow(output_header(include_metadata))
+        writer.writerows(rows)
 
     return len(rows)
-
-
-def load_positions_from_args(args: argparse.Namespace) -> Dict[str, Dict[str, str]]:
-    positions_path, source_type = resolve_positions_source(args)
-
-    logging.info("Using positions file: %s", positions_path)
-    logging.info("Position source type: %s", source_type)
-
-    if source_type == "bed":
-        return load_bed_positions(path=positions_path, species=args.species)
-
-    if source_type == "pangenes":
-        return load_pangenes_positions(path=positions_path)
-
-    return load_table_positions(
-        path=positions_path,
-        has_header=args.position_has_header,
-        key_column=args.position_key_column,
-        chr_column=args.position_chr_column,
-        start_column=args.position_start_column,
-        end_column=args.position_end_column,
-        species_column=args.position_species_column,
-    )
-
-
-def process_classification_file(args: argparse.Namespace) -> List[List[str]]:
-    branch_to_species = load_branch_definitions(args.branch_definitions)
-    color_dict = load_colors(args.colors, list(branch_to_species.keys()))
-    pos_dict = load_positions_from_args(args)
-
-    output_rows: List[List[str]] = []
-
-    for record_index, row_dict in enumerate(
-        get_input_rows(args.classification_tsv, args.classification_no_header),
-        start=1,
-    ):
-        try:
-            output_rows.append(
-                build_output_row(
-                    row_dict=row_dict,
-                    pos_dict=pos_dict,
-                    branch_to_species=branch_to_species,
-                    color_dict=color_dict,
-                    tip_separator=args.tip_separator,
-                    label_format=args.label_format,
-                    position_key_type=args.position_key_type,
-                    include_metadata=args.include_metadata,
-                )
-            )
-
-        except Exception as exc:
-            handle_error(
-                f"Failed while processing classification record {record_index} "
-                f"from {args.classification_tsv}: {exc}",
-                args.strict,
-            )
-
-    return output_rows
 
 
 def main() -> None:
     args = parse_args()
     setup_logging(args.log_level)
 
-    output_path = Path(args.output)
-    mode = prepare_output_file(output_path, args.on_exists)
+    branch_to_species = load_branch_definitions(args.branch_definitions)
+    color_dict = load_colors(args.colors, list(branch_to_species.keys()))
 
-    rows = process_classification_file(args)
+    positions_path, source_type = resolve_positions_source(args)
+    logging.info("Using positions file: %s", positions_path)
+    logging.info("Position source type: %s", source_type)
 
-    write_rows(
+    if source_type == "bed":
+        pos_dict = load_bed_positions(positions_path, species=args.species)
+    elif source_type == "pangenes":
+        pos_dict = load_pangenes_positions(positions_path)
+    else:
+        pos_dict = load_table_positions(
+            path=positions_path,
+            has_header=args.position_has_header,
+            key_column=args.position_key_column,
+            chr_column=args.position_chr_column,
+            start_column=args.position_start_column,
+            end_column=args.position_end_column,
+            species_column=args.position_species_column,
+        )
+
+    classification_rows = get_input_rows(
+        classification_path=args.classification_tsv,
+        no_header=args.classification_no_header,
+    )
+
+    link_specs = select_link_specs(
+        rows=classification_rows,
+        plot_level=args.plot_level,
+        skip_lossy_singletons=args.skip_lossy_singletons,
+        strict=args.strict,
+    )
+
+    output_rows: list[list[str]] = []
+    for endpoint_row, colour_row in link_specs:
+        try:
+            output_rows.append(
+                build_output_row(
+                    endpoint_row=endpoint_row,
+                    colour_row=colour_row,
+                    pos_dict=pos_dict,
+                    branch_to_species=branch_to_species,
+                    color_dict=color_dict,
+                    tip_separator=args.tip_separator,
+                    label_format=args.label_format,
+                    position_key_type=args.position_key_type,
+                    plot_level=args.plot_level,
+                    include_metadata=args.include_metadata,
+                )
+            )
+        except Exception as exc:
+            handle_error(
+                f"Skipping classification row while building {args.plot_level} link: {exc}",
+                args.strict,
+            )
+
+    mode = prepare_output_file(Path(args.output), args.on_exists)
+    n = write_rows(
         output_path=args.output,
-        rows=rows,
+        rows=output_rows,
         write_header=args.write_header,
         include_metadata=args.include_metadata,
         mode=mode,
@@ -799,7 +931,8 @@ def main() -> None:
 
     logging.info("Finished.")
     logging.info("Output file: %s", args.output)
-    logging.info("Rows written: %d", len(rows))
+    logging.info("Plot level: %s", args.plot_level)
+    logging.info("Rows written: %d", n)
 
 
 if __name__ == "__main__":
@@ -808,3 +941,4 @@ if __name__ == "__main__":
     except Exception as exc:
         logging.error(str(exc))
         sys.exit(1)
+
