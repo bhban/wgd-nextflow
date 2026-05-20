@@ -12,7 +12,7 @@ sif_paths:
 start_mode: redip_rooted
 run_rediploidisation: true
 
-genomes_tsv: genomes_Prim.tsv
+genomes_tsv: /exports/eddie/scratch/s2428892/nf-ericales/input/genomes_Prim.tsv
 species_tree: /exports/eddie/scratch/s2428892/nf-ericales/input/species_tree_Prim.nwk
 chr_dict_dir: /exports/eddie/scratch/s2428892/nf-ericales/input/chr_dict
 
