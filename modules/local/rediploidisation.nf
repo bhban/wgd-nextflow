@@ -315,11 +315,18 @@ process PREP_REDIP_CIRCOS {
     output:
     tuple val(species),
           val(plot_level),
-          path("rediploidisation/circos_inputs/${plot_level}/${species}")
+          path("rediploidisation/circos_inputs/${plot_level}/${species}"),
+          emit: inputs
+
+    tuple val(species),
+          val(plot_level),
+          path("rediploidisation/circos_input_summaries/${species}.${plot_level}.branch_summary.tsv"),
+          emit: summaries
 
     script:
     """
     mkdir -p rediploidisation/circos_inputs/${plot_level}
+    mkdir -p rediploidisation/circos_input_summaries
 
     test -s ${circos_links}
     test -s ${chr_bed}
@@ -329,6 +336,17 @@ process PREP_REDIP_CIRCOS {
         --circos-links ${circos_links} \
         --chr-bed ${chr_bed} \
         --output-dir rediploidisation/circos_inputs/${plot_level}/${species}
+
+    summary="rediploidisation/circos_inputs/${plot_level}/${species}/branch_summary.tsv"
+
+    if [[ -s "\$summary" ]]; then
+        cp "\$summary" rediploidisation/circos_input_summaries/${species}.${plot_level}.branch_summary.tsv
+    else
+        {
+            echo -e "branch_id\tlink_rows"
+            echo -e "complete\t0"
+        } > rediploidisation/circos_input_summaries/${species}.${plot_level}.branch_summary.tsv
+    fi
     """
 }
 
@@ -434,7 +452,7 @@ process REDIP_REPORT {
     path rooting_summaries
     path classifications
     path circos_links
-    path circos_inputs
+    path circos_input_summaries
 
     output:
     path "rediploidisation/report"
@@ -443,7 +461,7 @@ process REDIP_REPORT {
     def root_list = rooting_summaries.collect { it.toString() }.join(' ')
     def class_list = classifications.collect { it.toString() }.join(' ')
     def link_list = circos_links.collect { it.toString() }.join(' ')
-    def input_list = circos_inputs.collect { it.toString() }.join(' ')
+    def summary_list = circos_input_summaries.collect { it.toString() }.join(' ')
 
     """
     mkdir -p rediploidisation/report
@@ -467,7 +485,7 @@ from pathlib import Path
 
 class_files = '${class_list}'.split()
 link_files = '${link_list}'.split()
-input_dirs = '${input_list}'.split()
+summary_files = '${summary_list}'.split()
 
 report_dir = Path("rediploidisation/report")
 
@@ -507,14 +525,19 @@ with open(report_dir / "circos_links_summary.tsv", "w", newline="") as out:
 with open(report_dir / "circos_branch_summary.tsv", "w", newline="") as out:
     writer = csv.writer(out, delimiter="\t")
     writer.writerow(["species", "plot_level", "branch_id", "link_rows"])
-    for input_dir in input_dirs:
-        p = Path(input_dir)
-        species = p.name
-        plot_level = p.parent.name
-        summary = p / "branch_summary.tsv"
-        if not summary.exists():
+    for summary_file in summary_files:
+        p = Path(summary_file)
+        name = p.name.replace(".branch_summary.tsv", "")
+
+        if "." in name:
+            species, plot_level = name.rsplit(".", 1)
+        else:
+            species, plot_level = name, "unknown"
+
+        if not p.exists():
             continue
-        with open(summary, newline="") as handle:
+
+        with open(p, newline="") as handle:
             reader = csv.DictReader(handle, delimiter="\t")
             for row in reader:
                 writer.writerow([
@@ -758,7 +781,7 @@ workflow REDIPLOIDISATION {
         redip_utils_ch
     )
 
-    PLOT_REDIP_CIRCOS(PREP_REDIP_CIRCOS.out)
+    PLOT_REDIP_CIRCOS(PREP_REDIP_CIRCOS.out.inputs)
 
     PLOT_REDIP_SPECIES_TREE(
         MAKE_REDIP_LINKS.out,
@@ -776,15 +799,15 @@ workflow REDIPLOIDISATION {
         .map { species_name, plot_level, links -> links }
         .collect()
 
-    circos_inputs_ch = PREP_REDIP_CIRCOS.out
-        .map { species_name, plot_level, prep_dir -> prep_dir }
+    circos_input_summaries_ch = PREP_REDIP_CIRCOS.out.summaries
+        .map { species_name, plot_level, summary -> summary }
         .collect()
 
     REDIP_REPORT(
         rooting_summaries_ch,
         classifications_ch,
         circos_links_ch,
-        circos_inputs_ch
+        circos_input_summaries_ch
     )
 
     emit:
@@ -795,7 +818,8 @@ workflow REDIPLOIDISATION {
     branch_definitions = WRITE_BRANCH_DEFS.out
     classifications = CLASSIFY_REDIP_EVENTS.out
     circos_links = MAKE_REDIP_LINKS.out
-    circos_inputs = PREP_REDIP_CIRCOS.out
+    circos_inputs = PREP_REDIP_CIRCOS.out.inputs
+    circos_input_summaries = PREP_REDIP_CIRCOS.out.summaries
     circos_plots = PLOT_REDIP_CIRCOS.out
     species_tree_plots = PLOT_REDIP_SPECIES_TREE.out
     report = REDIP_REPORT.out
