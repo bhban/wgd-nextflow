@@ -474,9 +474,9 @@ import csv
 from collections import Counter
 from pathlib import Path
 
-class_files = """${class_list}""".split()
-link_files = """${link_list}""".split()
-input_dirs = """${input_list}""".split()
+class_files = '${class_list}'.split()
+link_files = '${link_list}'.split()
+input_dirs = '${input_list}'.split()
 
 report_dir = Path("rediploidisation/report")
 
