@@ -719,9 +719,9 @@ workflow REDIPLOIDISATION {
         .map { species_name, redip_mode, classification ->
             tuple(species_name, classification)
         }
-
+    
     links_input_ch = plot_levels_ch
-        .join(classifications_for_join_ch)
+        .combine(classifications_for_join_ch, by: 0)
         .map { species_name, redip_mode, plot_level, classification ->
             tuple(species_name, redip_mode, plot_level, classification)
         }
@@ -747,7 +747,7 @@ workflow REDIPLOIDISATION {
     }
 
     circos_links_with_chr_beds_ch = MAKE_REDIP_LINKS.out
-        .join(chr_beds_ch)
+        .combine(chr_beds_ch, by: 0)
         .map { species_name, plot_level, links, chr_bed ->
             tuple(species_name, plot_level, links, chr_bed)
         }
