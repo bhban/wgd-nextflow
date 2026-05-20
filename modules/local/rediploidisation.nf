@@ -44,14 +44,14 @@ rows = read_redip_species_modes_from_genomes_tsv(
 )
 
 with open("rediploidisation/redip_species_modes.tsv", "w") as out:
-    out.write("species\tredip_mode\n")
+    out.write("species\\tredip_mode\\n")
     for species, mode in rows:
-        out.write(f"{species}\t{mode}\n")
+        out.write(f"{species}\\t{mode}\\n")
 
 # Kept for backward compatibility with earlier workflow code and quick manual checks.
 with open("rediploidisation/redip_species.txt", "w") as out:
     for species, _mode in rows:
-        out.write(species + "\n")
+        out.write(species + "\\n")
 PY
     """
 }
