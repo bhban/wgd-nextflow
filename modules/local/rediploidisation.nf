@@ -194,22 +194,14 @@ process CLASSIFY_REDIP_EVENTS {
     if (redip_mode == 'standard') {
         mode_args = ""
     } else if (redip_mode == 'recurrent') {
-        mode_args = """
-            --recurrent-wgd
-            --recent-grouping ${recent_grouping}
-            --min-recent-groups ${min_recent_groups}
-        """
+        // Keep recurrent flags on one physical shell line so they remain part of
+        // the python command instead of being executed as separate commands.
+        mode_args = "--recurrent-wgd --recent-grouping ${recent_grouping} --min-recent-groups ${min_recent_groups}"
     } else if (redip_mode == 'recurrent_lossy') {
         def singleton_arg = write_lossy_singletons ? "--write-lossy-singletons" : ""
         def min_anc_arg = min_ancestral_target_copies ? "--min-ancestral-target-copies ${min_ancestral_target_copies}" : ""
-        mode_args = """
-            --recurrent-wgd
-            --allow-ancestral-loss
-            --recent-grouping ${recent_grouping}
-            --min-recent-groups ${min_recent_groups}
-            ${min_anc_arg}
-            ${singleton_arg}
-        """
+        // Kept as one line for the same reason as recurrent mode.
+        mode_args = "--recurrent-wgd --allow-ancestral-loss --recent-grouping ${recent_grouping} --min-recent-groups ${min_recent_groups} ${min_anc_arg} ${singleton_arg}"
     } else {
         throw new IllegalArgumentException("Unknown redip_mode: ${redip_mode}")
     }
@@ -237,8 +229,7 @@ process CLASSIFY_REDIP_EVENTS {
         --label-format ${redip_params.label_format} \
         --copy-mode ${redip_params.copy_mode} \
         --required-copies ${redip_params.required_copies} \
-        --min-tips ${redip_params.min_tips} \
-        ${mode_args}
+        --min-tips ${redip_params.min_tips} ${mode_args}
     """
 }
 
@@ -681,7 +672,12 @@ workflow REDIPLOIDISATION {
             } else {
                 species_name = row[0]
                 redip_mode = row[1]
-                rooted_trees = row[2]
+                // If combine() flattens the collected rooted-tree list, keep
+                // everything from index 2 onward as the tree list. If it does
+                // not flatten, row[2] is already the collected tree list.
+                rooted_trees = (row.size() == 3 && row[2] instanceof List)
+                    ? row[2]
+                    : row[2..-1]
             }
 
             tuple(species_name as String, redip_mode as String, rooted_trees)
