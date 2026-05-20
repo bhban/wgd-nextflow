@@ -574,16 +574,13 @@ workflow REDIPLOIDISATION {
     redip_species_modes_list_ch = EXTRACT_REDIP_SPECIES.out.modes
         .splitCsv(header: true, sep: '\t')
         .map { row ->
-            [
-                species: row.species as String,
-                redip_mode: row.redip_mode as String
-            ]
+            [row.species as String, row.redip_mode as String]
         }
         .collect()
     
     redip_species_ch = redip_species_modes_list_ch
         .flatMap { modes ->
-            modes.collect { item -> item.species }
+            modes.collect { item -> item[0] }
         }
 
     if (skip_rooting) {
@@ -647,7 +644,7 @@ workflow REDIPLOIDISATION {
             def rooted_trees = row[1]
     
             modes.collect { item ->
-                tuple(item.species, item.redip_mode, rooted_trees)
+                tuple(item[0], item[1], rooted_trees)
             }
         }
 
@@ -662,17 +659,17 @@ workflow REDIPLOIDISATION {
     plot_levels_ch = redip_species_modes_list_ch
         .flatMap { modes ->
             modes.collectMany { item ->
-                def species = item.species
-                def mode = item.redip_mode
+                def sp = item[0]
+                def mode = item[1]
     
                 if (mode == 'standard') {
-                    return [ tuple(species, mode, 'standard') ]
+                    return [ tuple(sp, mode, 'standard') ]
                 }
     
                 return [
-                    tuple(species, mode, 'standard'),
-                    tuple(species, mode, 'recent'),
-                    tuple(species, mode, 'ancestral')
+                    tuple(sp, mode, 'standard'),
+                    tuple(sp, mode, 'recent'),
+                    tuple(sp, mode, 'ancestral')
                 ]
             }
         }
