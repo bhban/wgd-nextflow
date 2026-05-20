@@ -383,6 +383,11 @@ process PLOT_REDIP_CIRCOS {
     script:
     """
     mkdir -p rediploidisation/circos_plots/${plot_level}/${species}
+    mkdir -p tmp
+
+    export TMPDIR="\$PWD/tmp"
+    export TMP="\$PWD/tmp"
+    export TEMP="\$PWD/tmp"
 
     # Nextflow may stage prep_dir as a symlinked directory.
     # Use -L and copy contents so the output contains real files.
@@ -409,7 +414,7 @@ process PLOT_REDIP_CIRCOS {
 
             (
                 cd "\$plot_dir"
-                ${params.circos_bin} -conf circos.conf
+                ${params.circos_bin} -noparanoid -conf circos.conf
             )
         done
 
