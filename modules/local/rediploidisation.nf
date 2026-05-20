@@ -224,7 +224,7 @@ process CLASSIFY_REDIP_EVENTS {
 
         while IFS= read -r newick || [ -n "\$newick" ]; do
             [ -z "\$newick" ] && continue
-            printf "%s\t%s\n" "\$tree_base" "\$newick" >> ${species}.rooted_gene_trees.nwk
+            printf "%s\\t%s\\n" "\$tree_base" "\$newick" >> ${species}.rooted_gene_trees.nwk
         done < "\$tree"
     done
 
