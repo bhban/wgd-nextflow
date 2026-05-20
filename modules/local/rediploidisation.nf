@@ -372,9 +372,15 @@ process PLOT_REDIP_CIRCOS {
     cp -rL ${prep_dir}/. rediploidisation/circos_plots/${plot_level}/${species}/
 
     n_conf=\$(find rediploidisation/circos_plots/${plot_level}/${species} -name circos.conf | wc -l)
+    n_no_links=\$(find rediploidisation/circos_plots/${plot_level}/${species} -name NO_LINKS.txt | wc -l)
+
+    if [[ "\$n_conf" -eq 0 && "\$n_no_links" -gt 0 ]]; then
+        echo "No Circos plot generated for ${species}.${plot_level}: no links to plot."
+        exit 0
+    fi
 
     if [[ "\$n_conf" -eq 0 ]]; then
-        echo "ERROR: No circos.conf files found for ${species}.${plot_level}" >&2
+        echo "ERROR: No circos.conf files found for ${species}.${plot_level}, and no NO_LINKS.txt marker was present." >&2
         find rediploidisation/circos_plots/${plot_level}/${species} -maxdepth 5 -type f >&2 || true
         exit 1
     fi
