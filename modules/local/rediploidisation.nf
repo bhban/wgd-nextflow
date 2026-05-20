@@ -325,44 +325,27 @@ process PREP_REDIP_CIRCOS {
 
     script:
     """
-    mkdir -p rediploidisation/circos_plots/${plot_level}/${species}
-    mkdir -p tmp
-    export TMPDIR="\$PWD/tmp"
-    export TMP="\$PWD/tmp"
-    export TEMP="\$PWD/tmp"
-    
-    cp -rL ${prep_dir}/. rediploidisation/circos_plots/${plot_level}/${species}/
-    
-    n_conf=\$(find rediploidisation/circos_plots/${plot_level}/${species} -name circos.conf | wc -l)
-    n_no_links=\$(find rediploidisation/circos_plots/${plot_level}/${species} -name NO_LINKS.txt | wc -l)
-    
-    if [[ "\$n_conf" -eq 0 && "\$n_no_links" -gt 0 ]]; then
-        echo "No Circos plot generated for ${species}.${plot_level}: no links to plot."
-        exit 0
-    fi
-    
-    if [[ "\$n_conf" -eq 0 ]]; then
-        echo "ERROR: No circos.conf files found for ${species}.${plot_level}, and no NO_LINKS.txt marker was present." >&2
-        find rediploidisation/circos_plots/${plot_level}/${species} -maxdepth 5 -type f >&2 || true
-        exit 1
-    fi
-    
-    find rediploidisation/circos_plots/${plot_level}/${species} \
-        -name circos.conf \
-        -print0 | while IFS= read -r -d '' conf; do
-            plot_dir=\$(dirname "\$conf")
-    
-            (
-                cd "\$plot_dir"
-                ${params.circos_bin} -noparanoid -conf circos.conf
-            )
-        done
-    
-    if ! find rediploidisation/circos_plots/${plot_level}/${species} \
-        \\( -name '*.png' -o -name '*.svg' \\) | grep -q .; then
-        echo "ERROR: Circos ran, but no PNG/SVG files were created for ${species}.${plot_level}" >&2
-        find rediploidisation/circos_plots/${plot_level}/${species} -maxdepth 5 -type f >&2 || true
-        exit 1
+    mkdir -p rediploidisation/circos_inputs/${plot_level}
+    mkdir -p rediploidisation/circos_input_summaries
+
+    test -s ${circos_links}
+    test -s ${chr_bed}
+
+    python ${prep_script} \
+        --species ${species}.${plot_level} \
+        --circos-links ${circos_links} \
+        --chr-bed ${chr_bed} \
+        --output-dir rediploidisation/circos_inputs/${plot_level}/${species}
+
+    summary="rediploidisation/circos_inputs/${plot_level}/${species}/branch_summary.tsv"
+
+    if [[ -s "\$summary" ]]; then
+        cp "\$summary" rediploidisation/circos_input_summaries/${species}.${plot_level}.branch_summary.tsv
+    else
+        {
+            echo -e "branch_id\\tlink_rows"
+            echo -e "complete\\t0"
+        } > rediploidisation/circos_input_summaries/${species}.${plot_level}.branch_summary.tsv
     fi
     """
 }
