@@ -288,7 +288,7 @@ workflow {
         species_tree_branch_number_size: 4,
         species_tree_tip_label_size: 5,
         species_tree_tip_label_offset: 1,
-        species_tree_branch_label_x_offset: 0.15,
+        species_tree_branch_label_x_offset: 0.2,
         species_tree_branch_label_y_offset: 0.1,
         species_tree_prune_to_branch_species: true,
 
