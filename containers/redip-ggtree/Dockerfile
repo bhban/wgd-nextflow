@@ -22,17 +22,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN Rscript -e "options(repos = BiocManager::repositories()); \
-    install.packages(c( \
-        'optparse', \
-        'ape', \
-        'ggplot2', \
-        'readr', \
-        'dplyr', \
-        'stringr', \
-        'tidyr' \
-    ), repos = 'https://cloud.r-project.org'); \
-    BiocManager::install('ggtree', ask = FALSE, update = FALSE); \
+RUN Rscript -e "install.packages(c('remotes', 'BiocManager'), repos = 'https://cloud.r-project.org')"
+
+RUN Rscript -e "remotes::install_version('ggplot2', version = '3.5.2', repos = 'https://cloud.r-project.org')"
+
+RUN Rscript -e "install.packages(c( \
+    'optparse', \
+    'ape', \
+    'readr', \
+    'dplyr', \
+    'stringr', \
+    'tidyr' \
+), repos = 'https://cloud.r-project.org')"
+
+RUN Rscript -e "BiocManager::install('ggtree', ask = FALSE, update = FALSE); \
     if (!requireNamespace('ggtree', quietly = TRUE)) stop('ggtree did not install')"
 
 RUN Rscript -e "suppressPackageStartupMessages({ \
@@ -44,7 +47,10 @@ RUN Rscript -e "suppressPackageStartupMessages({ \
     library(dplyr); \
     library(stringr); \
     library(tidyr) \
-}); cat('R species-tree plotting environment OK\n')"
+}); \
+cat('ggplot2=', as.character(packageVersion('ggplot2')), '\n'); \
+cat('ggtree=', as.character(packageVersion('ggtree')), '\n'); \
+cat('R species-tree plotting environment OK\n')"
 
 WORKDIR /work
 
