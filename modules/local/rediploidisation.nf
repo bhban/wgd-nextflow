@@ -9,6 +9,7 @@ nextflow.enable.dsl=2
  *   - backward-compatible 1/0 rediploidisation values
  *   - standard/recent/ancestral Circos layers
  *   - complete and branch-specific Circos plots for each layer
+ *   - optional skip_rooting mode for already-rooted *.rooted.treefile inputs
  */
 
 process EXTRACT_REDIP_SPECIES {
@@ -57,7 +58,7 @@ PY
 
 
 process ROOT_GENE_TREE {
-    tag { "og_${og}" }
+    tag { og }
     array (params.array_size as int)
 
     input:
@@ -69,27 +70,72 @@ process ROOT_GENE_TREE {
 
     output:
     tuple val(og),
-          path("rediploidisation/rooted_trees/og_${og}.rooted.treefile"),
+          path("rediploidisation/rooted_trees/${og}.rooted.treefile"),
           optional: true,
           emit: rooted_trees
 
     tuple val(og),
-          path("rediploidisation/rooting_summaries/og_${og}.rooting_summary.tsv"),
+          path("rediploidisation/rooting_summaries/${og}.rooting_summary.tsv"),
           emit: summaries
 
     script:
     """
     mkdir -p rediploidisation/rooted_trees rediploidisation/rooting_summaries
 
-    test -s ${iqtree_dir}/og_${og}_iqtree.treefile
+    test -s ${iqtree_dir}/${og}_iqtree.treefile
 
     python ${root_script} \
-        --tree ${iqtree_dir}/og_${og}_iqtree.treefile \
+        --tree ${iqtree_dir}/${og}_iqtree.treefile \
         --genomes-tsv ${genomes_tsv} \
-        --output-tree rediploidisation/rooted_trees/og_${og}.rooted.treefile \
-        --summary-tsv rediploidisation/rooting_summaries/og_${og}.rooting_summary.tsv \
+        --output-tree rediploidisation/rooted_trees/${og}.rooted.treefile \
+        --summary-tsv rediploidisation/rooting_summaries/${og}.rooting_summary.tsv \
         --tip-separator '${redip_params.tip_separator}' \
         --tree-format ${redip_params.gene_tree_format}
+    """
+}
+
+
+process MARK_ROOTED_GENE_TREE {
+    tag { tree_id }
+    array (params.array_size as int)
+
+    input:
+    tuple val(tree_id), path(rooted_tree)
+
+    output:
+    tuple val(tree_id),
+          path("rediploidisation/rooted_trees/${tree_id}.rooted.treefile"),
+          emit: rooted_trees
+
+    tuple val(tree_id),
+          path("rediploidisation/rooting_summaries/${tree_id}.rooting_summary.tsv"),
+          emit: summaries
+
+    script:
+    """
+    mkdir -p rediploidisation/rooted_trees rediploidisation/rooting_summaries
+
+    test -s ${rooted_tree}
+
+    # redip_rooted mode expects already-rooted trees whose original filenames
+    # end in .rooted.treefile. main.nf should pass tree_id as the full prefix
+    # before that suffix, for example:
+    #   og_8819_subtree_001.rooted.treefile -> tree_id=og_8819_subtree_001
+    # This preserves subtree/sample identifiers instead of shortening them.
+    case "\$(basename ${rooted_tree})" in
+        *.rooted.treefile) ;;
+        *)
+            echo "ERROR: redip_rooted input does not end with .rooted.treefile: ${rooted_tree}" >&2
+            exit 1
+            ;;
+    esac
+
+    cp ${rooted_tree} rediploidisation/rooted_trees/${tree_id}.rooted.treefile
+
+    {
+        echo -e "tree_file\tstatus\tmessage"
+        echo -e "${rooted_tree}\tALREADY_ROOTED\tRooting skipped because redip_params.skip_rooting was true"
+    } > rediploidisation/rooting_summaries/${tree_id}.rooting_summary.tsv
     """
 }
 
@@ -508,6 +554,15 @@ workflow REDIPLOIDISATION {
     prep_script_ch = Channel.value(file('scripts/rediploidisation/prep_circos.py'))
     plot_species_tree_script_ch = Channel.value(file('scripts/rediploidisation/plot_redip_species_tree.R'))
 
+    def skip_rooting = redip_params.containsKey('skip_rooting')
+        ? redip_params.skip_rooting
+        : false
+
+    def rooted_trees_emit_ch = Channel.empty()
+    def rooting_summaries_emit_ch = Channel.empty()
+    def rooted_trees_ch
+    def rooting_summaries_ch
+
     EXTRACT_REDIP_SPECIES(genomes_tsv, redip_utils_ch, redip_params)
 
     /*
@@ -526,25 +581,51 @@ workflow REDIPLOIDISATION {
             modes.collect { item -> item[0] }
         }
 
-    iqtree_tree_ch = iqtree_results.map { og, iqtree_dir ->
-        tuple(og, iqtree_dir)
+    if (skip_rooting) {
+        /*
+         * redip_rooted mode:
+         * iqtree_results is expected to be tuple(tree_id, rooted_tree), where
+         * rooted_tree must end in .rooted.treefile and tree_id is the full prefix
+         * before that suffix. MARK_ROOTED_GENE_TREE copies each input tree into
+         * the normal rediploidisation/rooted_trees/ layout and writes a synthetic
+         * summary so downstream reports keep the same shape.
+         */
+        MARK_ROOTED_GENE_TREE(iqtree_results)
+
+        rooted_trees_emit_ch = MARK_ROOTED_GENE_TREE.out.rooted_trees
+        rooting_summaries_emit_ch = MARK_ROOTED_GENE_TREE.out.summaries
+
+        rooted_trees_ch = MARK_ROOTED_GENE_TREE.out.rooted_trees
+            .map { og, rooted_tree -> rooted_tree }
+            .collect()
+
+        rooting_summaries_ch = MARK_ROOTED_GENE_TREE.out.summaries
+            .map { og, summary -> summary }
+            .collect()
+    } else {
+        iqtree_tree_ch = iqtree_results.map { og, iqtree_dir ->
+            tuple(og, iqtree_dir)
+        }
+
+        ROOT_GENE_TREE(
+            iqtree_tree_ch,
+            genomes_tsv,
+            root_script_ch,
+            redip_utils_ch,
+            redip_params
+        )
+
+        rooted_trees_emit_ch = ROOT_GENE_TREE.out.rooted_trees
+        rooting_summaries_emit_ch = ROOT_GENE_TREE.out.summaries
+
+        rooted_trees_ch = ROOT_GENE_TREE.out.rooted_trees
+            .map { og, rooted_tree -> rooted_tree }
+            .collect()
+
+        rooting_summaries_ch = ROOT_GENE_TREE.out.summaries
+            .map { og, summary -> summary }
+            .collect()
     }
-
-    ROOT_GENE_TREE(
-        iqtree_tree_ch,
-        genomes_tsv,
-        root_script_ch,
-        redip_utils_ch,
-        redip_params
-    )
-
-    rooted_trees_ch = ROOT_GENE_TREE.out.rooted_trees
-        .map { og, rooted_tree -> rooted_tree }
-        .collect()
-
-    rooting_summaries_ch = ROOT_GENE_TREE.out.summaries
-        .map { og, summary -> summary }
-        .collect()
 
     WRITE_BRANCH_DEFS(
         species_tree,
@@ -657,8 +738,8 @@ workflow REDIPLOIDISATION {
     emit:
     redip_species_modes = EXTRACT_REDIP_SPECIES.out.modes
     redip_species = EXTRACT_REDIP_SPECIES.out.species
-    rooted_trees = ROOT_GENE_TREE.out.rooted_trees
-    rooting_summaries = ROOT_GENE_TREE.out.summaries
+    rooted_trees = rooted_trees_emit_ch
+    rooting_summaries = rooting_summaries_emit_ch
     branch_definitions = WRITE_BRANCH_DEFS.out
     classifications = CLASSIFY_REDIP_EVENTS.out
     circos_links = MAKE_REDIP_LINKS.out
