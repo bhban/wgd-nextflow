@@ -40,7 +40,7 @@ option_list <- list(
               help = "Tip label text size."),
   make_option("--tip-label-offset", type = "double", default = 1,
               help = "Tip label offset."),
-  make_option("--branch-label-x-offset", type = "double", default = 0.15,
+  make_option("--branch-label-x-offset", type = "double", default = 0.2,
               help = "Horizontal offset for branch count labels."),
   make_option("--branch-label-y-offset", type = "double", default = 0.1,
               help = "Vertical offset for branch count labels."),
