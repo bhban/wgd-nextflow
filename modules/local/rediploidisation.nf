@@ -566,41 +566,44 @@ workflow REDIPLOIDISATION {
     EXTRACT_REDIP_SPECIES(genomes_tsv, redip_utils_ch, redip_params)
 
     /*
-     * Parse per-species redip modes once, then collect them into a value channel.
-     * This avoids reusing the same queue channel for species names, classification
-     * inputs, and plot-level expansion. The old 1/0 values are already resolved
-     * to text modes by redip_utils.py before this TSV is written.
+     * Parse per-species redip modes from the helper output.
+     *
+     * Important:
+     * Do not collect and then index species strings with item[0].
+     * That caused species like Eric_Calluna_vul to become E.
+     *
+     * These channels are parsed separately from the same small TSV so each
+     * downstream branch has its own queue channel.
      */
     redip_species_modes_for_species_ch = EXTRACT_REDIP_SPECIES.out.modes
         .splitCsv(header: true, sep: '\t')
         .map { row ->
             tuple(row.species as String, row.redip_mode as String)
         }
-    
+
     redip_species_modes_for_classify_ch = EXTRACT_REDIP_SPECIES.out.modes
         .splitCsv(header: true, sep: '\t')
         .map { row ->
             tuple(row.species as String, row.redip_mode as String)
         }
-    
+
     redip_species_modes_for_plot_ch = EXTRACT_REDIP_SPECIES.out.modes
         .splitCsv(header: true, sep: '\t')
         .map { row ->
             tuple(row.species as String, row.redip_mode as String)
         }
-    
+
     redip_species_ch = redip_species_modes_for_species_ch
         .map { species_name, redip_mode ->
             species_name
         }
+
     if (skip_rooting) {
         /*
          * redip_rooted mode:
          * iqtree_results is expected to be tuple(tree_id, rooted_tree), where
          * rooted_tree must end in .rooted.treefile and tree_id is the full prefix
-         * before that suffix. MARK_ROOTED_GENE_TREE copies each input tree into
-         * the normal rediploidisation/rooted_trees/ layout and writes a synthetic
-         * summary so downstream reports keep the same shape.
+         * before that suffix.
          */
         MARK_ROOTED_GENE_TREE(iqtree_results)
 
@@ -608,13 +611,18 @@ workflow REDIPLOIDISATION {
         rooting_summaries_emit_ch = MARK_ROOTED_GENE_TREE.out.summaries
 
         rooted_trees_ch = MARK_ROOTED_GENE_TREE.out.rooted_trees
-            .map { og, rooted_tree -> rooted_tree }
+            .map { tree_id, rooted_tree -> rooted_tree }
             .collect()
 
         rooting_summaries_ch = MARK_ROOTED_GENE_TREE.out.summaries
-            .map { og, summary -> summary }
+            .map { tree_id, summary -> summary }
             .collect()
+
     } else {
+        /*
+         * Standard redip mode:
+         * iqtree_results is expected to be tuple(og, iqtree_dir).
+         */
         iqtree_tree_ch = iqtree_results.map { og, iqtree_dir ->
             tuple(og, iqtree_dir)
         }
@@ -647,10 +655,36 @@ workflow REDIPLOIDISATION {
         redip_params
     )
 
+    /*
+     * Pair each focal species/mode with the one collected list of rooted trees.
+     *
+     * combine() can emit either:
+     *   [species, mode, rooted_trees]
+     * or:
+     *   [[species, mode], rooted_trees]
+     *
+     * This row-unpacking form handles both and avoids the LinkedList closure
+     * error seen when the collected rooted-tree list is interpreted as
+     * multiple closure arguments.
+     */
     classify_input_ch = redip_species_modes_for_classify_ch
         .combine(rooted_trees_ch)
-        .map { species_name, redip_mode, rooted_trees ->
-            tuple(species_name, redip_mode, rooted_trees)
+        .map { row ->
+            def species_name
+            def redip_mode
+            def rooted_trees
+
+            if (row.size() == 2 && row[0] instanceof List) {
+                species_name = row[0][0]
+                redip_mode = row[0][1]
+                rooted_trees = row[1]
+            } else {
+                species_name = row[0]
+                redip_mode = row[1]
+                rooted_trees = row[2]
+            }
+
+            tuple(species_name as String, redip_mode as String, rooted_trees)
         }
 
     CLASSIFY_REDIP_EVENTS(
@@ -661,12 +695,23 @@ workflow REDIPLOIDISATION {
         redip_params
     )
 
+    /*
+     * Create Circos plot layers.
+     *
+     * standard species:
+     *   standard only
+     *
+     * recurrent / recurrent_lossy species:
+     *   standard, recent, ancestral
+     */
     plot_levels_ch = redip_species_modes_for_plot_ch
         .flatMap { species_name, redip_mode ->
             if (redip_mode == 'standard') {
-                return [ tuple(species_name, redip_mode, 'standard') ]
+                return [
+                    tuple(species_name, redip_mode, 'standard')
+                ]
             }
-    
+
             return [
                 tuple(species_name, redip_mode, 'standard'),
                 tuple(species_name, redip_mode, 'recent'),
@@ -675,12 +720,14 @@ workflow REDIPLOIDISATION {
         }
 
     classifications_for_join_ch = CLASSIFY_REDIP_EVENTS.out
-        .map { species, mode, classification -> tuple(species, classification) }
+        .map { species_name, redip_mode, classification ->
+            tuple(species_name, classification)
+        }
 
     links_input_ch = plot_levels_ch
         .join(classifications_for_join_ch)
-        .map { species, mode, plot_level, classification ->
-            tuple(species, mode, plot_level, classification)
+        .map { species_name, redip_mode, plot_level, classification ->
+            tuple(species_name, redip_mode, plot_level, classification)
         }
 
     MAKE_REDIP_LINKS(
@@ -692,17 +739,21 @@ workflow REDIPLOIDISATION {
         redip_params
     )
 
-    chr_beds_ch = redip_species_ch.map { species ->
+    /*
+     * Pair each species/layer Circos links file with the chromosome BED for
+     * that focal species.
+     */
+    chr_beds_ch = redip_species_ch.map { species_name ->
         tuple(
-            species,
-            file("${params.chr_dict_dir}/${species}_chr_lengths.bed", checkIfExists: true)
+            species_name,
+            file("${params.chr_dict_dir}/${species_name}_chr_lengths.bed", checkIfExists: true)
         )
     }
 
     circos_links_with_chr_beds_ch = MAKE_REDIP_LINKS.out
         .join(chr_beds_ch)
-        .map { species, plot_level, links, chr_bed ->
-            tuple(species, plot_level, links, chr_bed)
+        .map { species_name, plot_level, links, chr_bed ->
+            tuple(species_name, plot_level, links, chr_bed)
         }
 
     PREP_REDIP_CIRCOS(
@@ -722,18 +773,23 @@ workflow REDIPLOIDISATION {
     )
 
     classifications_ch = CLASSIFY_REDIP_EVENTS.out
-        .map { species, mode, classification -> classification }
+        .map { species_name, redip_mode, classification -> classification }
         .collect()
 
     circos_links_ch = MAKE_REDIP_LINKS.out
-        .map { species, plot_level, links -> links }
+        .map { species_name, plot_level, links -> links }
         .collect()
 
     circos_inputs_ch = PREP_REDIP_CIRCOS.out
-        .map { species, plot_level, prep_dir -> prep_dir }
+        .map { species_name, plot_level, prep_dir -> prep_dir }
         .collect()
 
-    REDIP_REPORT(rooting_summaries_ch, classifications_ch, circos_links_ch, circos_inputs_ch)
+    REDIP_REPORT(
+        rooting_summaries_ch,
+        classifications_ch,
+        circos_links_ch,
+        circos_inputs_ch
+    )
 
     emit:
     redip_species_modes = EXTRACT_REDIP_SPECIES.out.modes
