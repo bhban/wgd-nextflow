@@ -365,19 +365,37 @@ process PLOT_REDIP_CIRCOS {
 
     script:
     """
-    mkdir -p rediploidisation/circos_plots/${plot_level}
+    mkdir -p rediploidisation/circos_plots/${plot_level}/${species}
 
-    cp -r ${prep_dir} rediploidisation/circos_plots/${plot_level}/${species}
+    # Nextflow may stage prep_dir as a symlinked directory.
+    # Use -L and copy contents so the output contains real files.
+    cp -rL ${prep_dir}/. rediploidisation/circos_plots/${plot_level}/${species}/
+
+    n_conf=\$(find rediploidisation/circos_plots/${plot_level}/${species} -name circos.conf | wc -l)
+
+    if [[ "\$n_conf" -eq 0 ]]; then
+        echo "ERROR: No circos.conf files found for ${species}.${plot_level}" >&2
+        find rediploidisation/circos_plots/${plot_level}/${species} -maxdepth 5 -type f >&2 || true
+        exit 1
+    fi
 
     find rediploidisation/circos_plots/${plot_level}/${species} \
         -name circos.conf \
         -print0 | while IFS= read -r -d '' conf; do
             plot_dir=\$(dirname "\$conf")
+
             (
                 cd "\$plot_dir"
                 ${params.circos_bin} -conf circos.conf
             )
         done
+
+    if ! find rediploidisation/circos_plots/${plot_level}/${species} \
+        \\( -name '*.png' -o -name '*.svg' \\) | grep -q .; then
+        echo "ERROR: Circos ran, but no PNG/SVG files were created for ${species}.${plot_level}" >&2
+        find rediploidisation/circos_plots/${plot_level}/${species} -maxdepth 5 -type f >&2 || true
+        exit 1
+    fi
     """
 }
 
