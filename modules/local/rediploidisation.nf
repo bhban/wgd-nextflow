@@ -571,18 +571,28 @@ workflow REDIPLOIDISATION {
      * inputs, and plot-level expansion. The old 1/0 values are already resolved
      * to text modes by redip_utils.py before this TSV is written.
      */
-    redip_species_modes_list_ch = EXTRACT_REDIP_SPECIES.out.modes
+    redip_species_modes_for_species_ch = EXTRACT_REDIP_SPECIES.out.modes
         .splitCsv(header: true, sep: '\t')
         .map { row ->
-            [row.species as String, row.redip_mode as String]
+            tuple(row.species as String, row.redip_mode as String)
         }
-        .collect()
     
-    redip_species_ch = redip_species_modes_list_ch
-        .flatMap { modes ->
-            modes.collect { item -> item[0] }
+    redip_species_modes_for_classify_ch = EXTRACT_REDIP_SPECIES.out.modes
+        .splitCsv(header: true, sep: '\t')
+        .map { row ->
+            tuple(row.species as String, row.redip_mode as String)
         }
-
+    
+    redip_species_modes_for_plot_ch = EXTRACT_REDIP_SPECIES.out.modes
+        .splitCsv(header: true, sep: '\t')
+        .map { row ->
+            tuple(row.species as String, row.redip_mode as String)
+        }
+    
+    redip_species_ch = redip_species_modes_for_species_ch
+        .map { species_name, redip_mode ->
+            species_name
+        }
     if (skip_rooting) {
         /*
          * redip_rooted mode:
@@ -637,15 +647,10 @@ workflow REDIPLOIDISATION {
         redip_params
     )
 
-    classify_input_ch = redip_species_modes_list_ch
+    classify_input_ch = redip_species_modes_for_classify_ch
         .combine(rooted_trees_ch)
-        .flatMap { row ->
-            def modes = row[0]
-            def rooted_trees = row[1]
-    
-            modes.collect { item ->
-                tuple(item[0], item[1], rooted_trees)
-            }
+        .map { species_name, redip_mode, rooted_trees ->
+            tuple(species_name, redip_mode, rooted_trees)
         }
 
     CLASSIFY_REDIP_EVENTS(
@@ -656,22 +661,17 @@ workflow REDIPLOIDISATION {
         redip_params
     )
 
-    plot_levels_ch = redip_species_modes_list_ch
-        .flatMap { modes ->
-            modes.collectMany { item ->
-                def sp = item[0]
-                def mode = item[1]
-    
-                if (mode == 'standard') {
-                    return [ tuple(sp, mode, 'standard') ]
-                }
-    
-                return [
-                    tuple(sp, mode, 'standard'),
-                    tuple(sp, mode, 'recent'),
-                    tuple(sp, mode, 'ancestral')
-                ]
+    plot_levels_ch = redip_species_modes_for_plot_ch
+        .flatMap { species_name, redip_mode ->
+            if (redip_mode == 'standard') {
+                return [ tuple(species_name, redip_mode, 'standard') ]
             }
+    
+            return [
+                tuple(species_name, redip_mode, 'standard'),
+                tuple(species_name, redip_mode, 'recent'),
+                tuple(species_name, redip_mode, 'ancestral')
+            ]
         }
 
     classifications_for_join_ch = CLASSIFY_REDIP_EVENTS.out
