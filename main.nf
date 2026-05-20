@@ -200,6 +200,32 @@ def makeTreecleanNtAlignmentChannelFromDir(ntDir) {
         }
 }
 
+def makeRootedTreeChannelFromDir(rootedTreeDir) {
+    Channel
+        .fromPath("${rootedTreeDir}/*.rooted.treefile", checkIfExists: true)
+        .map { treefile ->
+            /*
+             * redip_rooted requires filenames ending in .rooted.treefile.
+             * Preserve the complete prefix before that suffix.
+             *
+             * Examples:
+             *   og_8819.rooted.treefile             -> og_8819
+             *   og_8819_subtree_001.rooted.treefile -> og_8819_subtree_001
+             */
+            def name = treefile.name
+            def tree_id = name.replaceFirst(/\.rooted\.treefile$/, "")
+
+            if (!tree_id || tree_id == name) {
+                throw new IllegalArgumentException(
+                    "Could not parse rooted tree ID from filename: ${treefile}. " +
+                    "Expected filename ending in .rooted.treefile"
+                )
+            }
+
+            tuple(tree_id, treefile)
+        }
+}
+
 
 // Workflow
 workflow {
@@ -234,6 +260,7 @@ workflow {
         position_species_column: 'genome',
 
         gene_trees_dir: '',
+        rooted_gene_trees_dir: '',
         genespace_wd: '',
 
         species_tree_format: 1,
@@ -244,6 +271,27 @@ workflow {
         required_copies: 2,
         min_tips: 1,
         position_key_type: 'gene',
+
+        classify_mode: 'recurrent',
+        recent_grouping: 'auto',
+        min_recent_groups: 2,
+        min_ancestral_target_copies: null,
+        write_lossy_singletons: true,
+        
+        species_tree_annotation: '',
+        branch_colors: '',
+        species_tree_plot_width: 8,
+        species_tree_plot_height: 6,
+        species_tree_plot_dpi: 300,
+        species_tree_circle_size: 7,
+        species_tree_circle_stroke: 0.5,
+        species_tree_branch_number_size: 4,
+        species_tree_tip_label_size: 5,
+        species_tree_tip_label_offset: 1,
+        species_tree_branch_label_x_offset: 0.15,
+        species_tree_branch_label_y_offset: 0.1,
+        species_tree_prune_to_branch_species: true,
+
         cleanup_tmp: true
     ]
 
@@ -353,14 +401,95 @@ workflow {
             redip_out.rooting_summaries.map { og, summary -> summary }.collect()
         )
         post_outputs_ch = post_outputs_ch.mix(redip_out.branch_definitions)
+
         post_outputs_ch = post_outputs_ch.mix(
-            redip_out.classifications.map { species, file -> file }.collect()
+            redip_out.classifications.map { species, redip_mode, file -> file }.collect()
         )
         post_outputs_ch = post_outputs_ch.mix(
-            redip_out.circos_links.map { species, file -> file }.collect()
+            redip_out.circos_links.map { species, plot_level, file -> file }.collect()
         )
         post_outputs_ch = post_outputs_ch.mix(
-            redip_out.circos_plots.map { species, dir -> dir }.collect()
+            redip_out.circos_inputs.map { species, plot_level, dir -> dir }.collect()
+        )
+        post_outputs_ch = post_outputs_ch.mix(
+            redip_out.circos_plots.map { species, plot_level, dir -> dir }.collect()
+        )
+        post_outputs_ch = post_outputs_ch.mix(
+            redip_out.species_tree_plots.map { species, plot_level, file -> file }.collect()
+        )
+        post_outputs_ch = post_outputs_ch.mix(redip_out.report)
+
+    /*
+     * =========================
+     * REDIP-ONLY MODE WITH ALREADY ROOTED GENE TREES
+     * =========================
+     */
+
+    } else if (params.start_mode == 'redip_rooted') {
+
+        genomes_rows = readGenomesTable(params.genomes_tsv)
+        genomes_tsv_ch = Channel.value(file(params.genomes_tsv, checkIfExists: true))
+
+        if (!params.run_rediploidisation) {
+            error "--run_rediploidisation must be true when --start_mode redip_rooted"
+        }
+
+        if (!species_tree_path) {
+            error "--species_tree must be provided when --start_mode redip_rooted"
+        }
+
+        if (!redipParams.rooted_gene_trees_dir?.toString()?.trim()) {
+            error "--rediploidisation.rooted_gene_trees_dir must be provided when --start_mode redip_rooted"
+        }
+
+        if (
+            redipParams.positions_source != 'positions' &&
+            !redipParams.genespace_wd?.toString()?.trim()
+        ) {
+            error "--rediploidisation.genespace_wd must be provided unless positions_source = positions"
+        }
+
+        if (
+            redipParams.positions_source == 'positions' &&
+            !redipParams.positions?.toString()?.trim()
+        ) {
+            error "--rediploidisation.positions must be provided when positions_source = positions"
+        }
+
+        def redip_genespace_wd_ch = redipParams.genespace_wd?.toString()?.trim()
+            ? Channel.value(file(redipParams.genespace_wd))
+            : Channel.value(file('.'))
+
+        def redip_out = REDIPLOIDISATION(
+            genomes_tsv_ch,
+            Channel.value(file(species_tree_path, checkIfExists: true)),
+            makeRootedTreeChannelFromDir(redipParams.rooted_gene_trees_dir),
+            redip_genespace_wd_ch,
+            redipParams + [skip_rooting: true]
+        )
+
+        post_outputs_ch = post_outputs_ch.mix(
+            redip_out.rooted_trees.map { tree_id, tree -> tree }.collect()
+        )
+        post_outputs_ch = post_outputs_ch.mix(
+            redip_out.rooting_summaries.map { tree_id, summary -> summary }.collect()
+        )
+        post_outputs_ch = post_outputs_ch.mix(redip_out.branch_definitions)
+
+        post_outputs_ch = post_outputs_ch.mix(
+            redip_out.classifications.map { species, redip_mode, file -> file }.collect()
+        )
+        post_outputs_ch = post_outputs_ch.mix(
+            redip_out.circos_links.map { species, plot_level, file -> file }.collect()
+        )
+        post_outputs_ch = post_outputs_ch.mix(
+            redip_out.circos_inputs.map { species, plot_level, dir -> dir }.collect()
+        )
+        post_outputs_ch = post_outputs_ch.mix(
+            redip_out.circos_plots.map { species, plot_level, dir -> dir }.collect()
+        )
+        post_outputs_ch = post_outputs_ch.mix(
+            redip_out.species_tree_plots.map { species, plot_level, file -> file }.collect()
         )
         post_outputs_ch = post_outputs_ch.mix(redip_out.report)
 
@@ -475,17 +604,28 @@ workflow {
             )
 
             post_outputs_ch = post_outputs_ch.mix(
-                redip_out.rooted_trees.flatMap { og, tree, summary -> [tree, summary] }.collect()
+                redip_out.rooted_trees.map { tree_id, tree -> tree }.collect()
             )
+            post_outputs_ch = post_outputs_ch.mix(
+                redip_out.rooting_summaries.map { tree_id, summary -> summary }.collect()
+            )
+
             post_outputs_ch = post_outputs_ch.mix(redip_out.branch_definitions)
+
             post_outputs_ch = post_outputs_ch.mix(
-                redip_out.classifications.map { species, file -> file }.collect()
+                redip_out.classifications.map { species, redip_mode, file -> file }.collect()
             )
             post_outputs_ch = post_outputs_ch.mix(
-                redip_out.circos_links.map { species, file -> file }.collect()
+                redip_out.circos_links.map { species, plot_level, file -> file }.collect()
             )
             post_outputs_ch = post_outputs_ch.mix(
-                redip_out.circos_plots.map { species, dir -> dir }.collect()
+                redip_out.circos_inputs.map { species, plot_level, dir -> dir }.collect()
+            )
+            post_outputs_ch = post_outputs_ch.mix(
+                redip_out.circos_plots.map { species, plot_level, dir -> dir }.collect()
+            )
+            post_outputs_ch = post_outputs_ch.mix(
+                redip_out.species_tree_plots.map { species, plot_level, file -> file }.collect()
             )
             post_outputs_ch = post_outputs_ch.mix(redip_out.report)
         }
@@ -682,7 +822,7 @@ workflow {
             genespace_ready_out = VALIDATE_GENESPACE_RESULTS(existing_wd_ch)
 
         } else {
-            error "Unsupported start_mode: ${params.start_mode}. Use 'full', 'parsed', 'genespace', 'alerax', 'redip', or 'treeclean'."
+            error "Unsupported start_mode: ${params.start_mode}. Use 'full', 'parsed', 'genespace', 'alerax', 'redip', 'redip_rooted', or 'treeclean'."
         }
 
         if (params.start_mode != 'genespace') {
@@ -976,14 +1116,21 @@ workflow {
                 redip_out.rooting_summaries.map { og, summary -> summary }.collect()
             )
             post_outputs_ch = post_outputs_ch.mix(redip_out.branch_definitions)
+
             post_outputs_ch = post_outputs_ch.mix(
-                redip_out.classifications.map { species, file -> file }.collect()
+                redip_out.classifications.map { species, redip_mode, file -> file }.collect()
             )
             post_outputs_ch = post_outputs_ch.mix(
-                redip_out.circos_links.map { species, file -> file }.collect()
+                redip_out.circos_links.map { species, plot_level, file -> file }.collect()
             )
             post_outputs_ch = post_outputs_ch.mix(
-                redip_out.circos_plots.map { species, dir -> dir }.collect()
+                redip_out.circos_inputs.map { species, plot_level, dir -> dir }.collect()
+            )
+            post_outputs_ch = post_outputs_ch.mix(
+                redip_out.circos_plots.map { species, plot_level, dir -> dir }.collect()
+            )
+            post_outputs_ch = post_outputs_ch.mix(
+                redip_out.species_tree_plots.map { species, plot_level, file -> file }.collect()
             )
             post_outputs_ch = post_outputs_ch.mix(redip_out.report)
         }
