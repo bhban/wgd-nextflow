@@ -2,6 +2,27 @@
 
 from __future__ import annotations
 
+"""
+Prepare Circos input directories for one species and one plot layer.
+
+Input is the metadata-rich links TSV from make_links.py. This script writes:
+
+    complete/
+        karyotype.txt
+        <plot>.links.tsv
+        circos.conf
+
+    branch_specific/branch_<redip_branch>/
+        karyotype.txt
+        <plot>.branch_<redip_branch>.links.tsv
+        circos.conf
+
+The complete plot shows all links for the species/layer. Branch-specific plots
+show only links assigned to one redip branch/colour, which helps with visual
+clutter. This replaces the older behaviour where per-branch link files were
+written but only one top-level circos.conf was generated.
+"""
+
 import argparse
 import csv
 import re
@@ -11,13 +32,30 @@ from pathlib import Path
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Prepare Circos input files for one rediploidisation species."
+        description="Prepare complete and branch-specific Circos inputs."
     )
-    parser.add_argument("--species", required=True)
+    parser.add_argument("--species", required=True, help="Plot label, usually species.plot_level.")
     parser.add_argument("--circos-links", required=True)
     parser.add_argument("--chr-bed", required=True)
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument(
+        "--allow-empty",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "If no links remain after filtering, write a README and branch_summary.tsv "
+            "but do not create circos.conf files. Enabled by default so empty plot "
+            "levels do not fail the whole workflow."
+        ),
+    )
     return parser.parse_args()
+
+
+def safe_label(value: str) -> str:
+    """Make a value safe for filenames while preserving readable branch IDs."""
+    value = str(value).strip()
+    value = re.sub(r"[^A-Za-z0-9_.-]+", "_", value)
+    return value or "unknown"
 
 
 def branch_sort_key(value: str) -> tuple[int, str]:
@@ -28,18 +66,16 @@ def branch_sort_key(value: str) -> tuple[int, str]:
 
 
 def make_karyotype(chr_bed: Path, out_karyotype: Path) -> list[str]:
-    chr_names = []
+    """Write a Circos karyotype for main chromosomes named chr<number>."""
+    chr_names: list[str] = []
+    out_karyotype.parent.mkdir(parents=True, exist_ok=True)
 
     with open(chr_bed, newline="") as handle, open(out_karyotype, "w", newline="") as out:
         reader = csv.reader(handle, delimiter="\t")
 
         for row in reader:
-            if not row:
+            if not row or row[0].startswith("#"):
                 continue
-
-            if row[0].startswith("#"):
-                continue
-
             if len(row) < 3:
                 continue
 
@@ -84,26 +120,21 @@ def load_links(circos_tsv: Path) -> list[dict[str, str]]:
         return list(reader)
 
 
-def filter_main_chr_rows(
-    rows: list[dict[str, str]],
-    valid_chr: set[str],
-) -> list[dict[str, str]]:
-    kept = []
-
+def filter_main_chr_rows(rows: list[dict[str, str]], valid_chr: set[str]) -> list[dict[str, str]]:
+    kept: list[dict[str, str]] = []
     for row in rows:
         chr1 = (row.get("chr1") or "").strip()
         chr2 = (row.get("chr2") or "").strip()
-
         if chr1 in valid_chr and chr2 in valid_chr:
             kept.append(row)
-
     return kept
 
 
 def write_links_file(rows: list[dict[str, str]], out_path: Path) -> None:
+    """Write the 7-column Circos link file consumed by circos.conf."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", newline="") as out:
         writer = csv.writer(out, delimiter="\t")
-
         for row in rows:
             writer.writerow([
                 row["chr1"].strip(),
@@ -117,11 +148,12 @@ def write_links_file(rows: list[dict[str, str]], out_path: Path) -> None:
 
 
 def write_circos_conf(
-    species: str,
+    plot_name: str,
     out_conf: Path,
     karyotype_path: Path,
-    full_links_path: Path,
+    links_path: Path,
 ) -> None:
+    """Write a self-contained Circos configuration for one links file."""
     conf = f"""karyotype = {karyotype_path.name}
 
 chromosomes_units = 1000000
@@ -170,7 +202,7 @@ format         = %d
 
 <links>
 <link>
-file          = {full_links_path.name}
+file          = {links_path.name}
 radius        = 0.78r
 bezier_radius = 0.1r
 thickness     = 2p
@@ -182,7 +214,7 @@ record_limit  = 100000
 
 <image>
 dir               = .
-file              = circos_{species}
+file              = circos_{plot_name}
 png               = yes
 svg               = yes
 radius            = 1800p
@@ -195,8 +227,48 @@ auto_alpha_steps  = 5
 <<include etc/colors_fonts_patterns.conf>>
 <<include etc/housekeeping.conf>>
 """
-
     out_conf.write_text(conf)
+
+
+def prepare_one_circos_dir(
+    plot_name: str,
+    out_dir: Path,
+    chr_bed: Path,
+    rows: list[dict[str, str]],
+) -> None:
+    """Write one runnable Circos directory."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    karyotype_path = out_dir / "karyotype.txt"
+    links_path = out_dir / f"{plot_name}.links.tsv"
+    conf_path = out_dir / "circos.conf"
+
+    make_karyotype(chr_bed, karyotype_path)
+    write_links_file(rows, links_path)
+    write_circos_conf(
+        plot_name=plot_name,
+        out_conf=conf_path,
+        karyotype_path=karyotype_path,
+        links_path=links_path,
+    )
+
+    with open(out_dir / "README.txt", "w") as out:
+        out.write(f"Plot name: {plot_name}\n")
+        out.write(f"Rows: {len(rows)}\n")
+        out.write(f"Links: {links_path.name}\n")
+        out.write(f"Circos config: {conf_path.name}\n")
+
+
+def write_empty_outputs(output_dir: Path, species: str, reason: str) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with open(output_dir / "README.txt", "w") as out:
+        out.write(f"Species/plot: {species}\n")
+        out.write("No Circos config was written.\n")
+        out.write(f"Reason: {reason}\n")
+    with open(output_dir / "branch_summary.tsv", "w", newline="") as handle:
+        writer = csv.writer(handle, delimiter="\t")
+        writer.writerow(["branch_id", "link_rows"])
+        writer.writerow(["complete", 0])
+    (output_dir / "NO_LINKS.txt").write_text(reason + "\n")
 
 
 def main() -> None:
@@ -205,64 +277,86 @@ def main() -> None:
     species = args.species
     circos_tsv = Path(args.circos_links)
     chr_bed = Path(args.chr_bed)
-    species_dir = Path(args.output_dir)
-
-    links_by_branch_dir = species_dir / "links_by_redip_branch"
-    species_dir.mkdir(parents=True, exist_ok=True)
-    links_by_branch_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = Path(args.output_dir)
 
     if not chr_bed.exists():
         raise FileNotFoundError(f"Missing chromosome BED for {species}: {chr_bed}")
-
     if not circos_tsv.exists():
         raise FileNotFoundError(f"Missing Circos links TSV for {species}: {circos_tsv}")
 
-    karyotype_path = species_dir / "karyotype.txt"
-    full_links_path = species_dir / f"{species}.links.tsv"
-    conf_path = species_dir / "circos.conf"
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    chr_names = make_karyotype(chr_bed, karyotype_path)
+    # Build a temporary karyotype once to identify valid main chromosomes.
+    tmp_karyotype = output_dir / "_tmp_karyotype_check.txt"
+    chr_names = make_karyotype(chr_bed, tmp_karyotype)
+    tmp_karyotype.unlink(missing_ok=True)
     valid_chr = set(chr_names)
 
     all_rows = load_links(circos_tsv)
     kept_rows = filter_main_chr_rows(all_rows, valid_chr)
 
-    write_links_file(kept_rows, full_links_path)
+    if not kept_rows:
+        reason = f"No links remained after filtering to main chromosomes for {species}."
+        if args.allow_empty:
+            write_empty_outputs(output_dir, species, reason)
+            print(reason)
+            return
+        raise ValueError(reason)
 
-    branch_rows = defaultdict(list)
-    for row in kept_rows:
-        branch = (row.get("redip_branch") or "").strip()
-        if branch:
-            branch_rows[branch].append(row)
-
-    for branch in sorted(branch_rows, key=branch_sort_key):
-        out_branch = links_by_branch_dir / f"{species}.branch_{branch}.links.tsv"
-        write_links_file(branch_rows[branch], out_branch)
-
-    write_circos_conf(
-        species=species,
-        out_conf=conf_path,
-        karyotype_path=karyotype_path,
-        full_links_path=full_links_path,
+    # Complete plot: all links for this species/layer.
+    complete_dir = output_dir / "complete"
+    prepare_one_circos_dir(
+        plot_name=safe_label(species),
+        out_dir=complete_dir,
+        chr_bed=chr_bed,
+        rows=kept_rows,
     )
 
-    summary_path = species_dir / "README.txt"
-    with open(summary_path, "w") as out:
-        out.write(f"Species: {species}\n")
-        out.write(f"Karyotype: {karyotype_path.name}\n")
-        out.write(f"Full links: {full_links_path.name}\n")
-        out.write(f"Circos config: {conf_path.name}\n")
-        out.write(f"Rows retained on main chromosomes: {len(kept_rows)}\n")
-        out.write("Per-branch files:\n")
+    # Branch-specific plots: one plot per redip_branch/colour.
+    # Empty branch IDs are treated as an error because those links would appear
+    # in the complete plot but silently disappear from branch-specific plots.
+    branch_rows: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row_number, row in enumerate(kept_rows, start=1):
+        branch = (row.get("redip_branch") or "").strip()
+        if not branch:
+            raise ValueError(
+                f"Row {row_number} in {circos_tsv} has an empty redip_branch. "
+                "Cannot create branch-specific Circos plots."
+            )
+        branch_rows[branch].append(row)
 
+    branch_specific_root = output_dir / "branch_specific"
+    for branch in sorted(branch_rows, key=branch_sort_key):
+        branch_label = f"branch_{safe_label(branch)}"
+        plot_name = f"{safe_label(species)}.{branch_label}"
+        prepare_one_circos_dir(
+            plot_name=plot_name,
+            out_dir=branch_specific_root / branch_label,
+            chr_bed=chr_bed,
+            rows=branch_rows[branch],
+        )
+
+    with open(output_dir / "branch_summary.tsv", "w", newline="") as handle:
+        writer = csv.writer(handle, delimiter="\t")
+        writer.writerow(["branch_id", "link_rows"])
+        writer.writerow(["complete", len(kept_rows)])
         for branch in sorted(branch_rows, key=branch_sort_key):
+            writer.writerow([branch, len(branch_rows[branch])])
+
+    with open(output_dir / "README.txt", "w") as out:
+        out.write(f"Species/plot: {species}\n")
+        out.write(f"Rows retained on main chromosomes: {len(kept_rows)}\n")
+        out.write("Complete plot directory: complete\n")
+        out.write("Branch-specific plot directories:\n")
+        for branch in sorted(branch_rows, key=branch_sort_key):
+            branch_label = f"branch_{safe_label(branch)}"
             out.write(
-                f"  links_by_redip_branch/{species}.branch_{branch}.links.tsv"
-                f"\t{len(branch_rows[branch])} rows\n"
+                f"  branch_specific/{branch_label}\t"
+                f"{len(branch_rows[branch])} rows\n"
             )
 
     print(f"Prepared Circos inputs for {species}")
-    print(f"Output directory: {species_dir}")
+    print(f"Output directory: {output_dir}")
 
 
 if __name__ == "__main__":
