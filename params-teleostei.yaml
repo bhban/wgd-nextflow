@@ -33,3 +33,7 @@ require_outgroup_og: true
 collapse_tandems: true
 
 alignment_method: 'mafft_aa'
+
+rediploidisation:
+  classify_mode: 'recurrent_lossy'
+  species_tree_branch_label_x_offset: 0.5
