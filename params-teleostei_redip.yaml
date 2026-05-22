@@ -1,0 +1,15 @@
+sif_paths:
+  redip: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip_1.0.sif"
+  redip_ggtree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip-ggtree_1.0.sif"
+
+start_mode: redip_rooted
+run_rediploidisation: true
+
+genomes_tsv: /exports/eddie/scratch/s2428892/nf-teleostei/input/genomes.tsv
+species_tree: /exports/eddie/scratch/s2428892/nf-teleostei/input/species_tree.nwk
+chr_dict_dir: /exports/eddie/scratch/s2428892/nf-teleostei/input/chr_dict
+
+rediploidisation:
+  rooted_gene_trees_dir: /exports/eddie/scratch/s2428892/nf-teleostei/results_medaka/rediploidisation/rooted_trees
+  genespace_wd: /exports/eddie/scratch/s2428892/nf-teleostei/results_medaka/validated_genespace_wd
+  classify_mode: 'recurrent_lossy'
