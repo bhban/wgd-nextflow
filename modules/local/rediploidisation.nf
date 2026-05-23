@@ -58,37 +58,38 @@ PY
 
 
 process ROOT_GENE_TREE {
-    tag { og }
+    tag { unit_id }
     array (params.array_size as int)
 
     input:
-    tuple val(og), path(iqtree_dir)
+    tuple val(unit_id), path(iqtree_dir)
     path genomes_tsv
     path root_script
     path redip_utils
     val redip_params
 
     output:
-    tuple val(og),
-          path("rediploidisation/rooted_trees/${og}.rooted.treefile"),
+    tuple val(unit_id),
+          path("rediploidisation/rooted_trees/${unit_id}.rooted.treefile"),
           optional: true,
           emit: rooted_trees
 
-    tuple val(og),
-          path("rediploidisation/rooting_summaries/${og}.rooting_summary.tsv"),
+    tuple val(unit_id),
+          path("rediploidisation/rooting_summaries/${unit_id}.rooting_summary.tsv"),
           emit: summaries
 
     script:
     """
     mkdir -p rediploidisation/rooted_trees rediploidisation/rooting_summaries
 
-    test -s ${iqtree_dir}/${og}_iqtree.treefile
+    treefile="${iqtree_dir}/${unit_id}_iqtree.treefile"
+    test -s "\$treefile"
 
     python ${root_script} \
-        --tree ${iqtree_dir}/${og}_iqtree.treefile \
+        --tree "\$treefile" \
         --genomes-tsv ${genomes_tsv} \
-        --output-tree rediploidisation/rooted_trees/${og}.rooted.treefile \
-        --summary-tsv rediploidisation/rooting_summaries/${og}.rooting_summary.tsv \
+        --output-tree rediploidisation/rooted_trees/${unit_id}.rooted.treefile \
+        --summary-tsv rediploidisation/rooting_summaries/${unit_id}.rooting_summary.tsv \
         --tip-separator '${redip_params.tip_separator}' \
         --tree-format ${redip_params.gene_tree_format}
     """
@@ -664,11 +665,17 @@ workflow REDIPLOIDISATION {
     } else {
         /*
          * Standard redip mode:
-         * iqtree_results is expected to be tuple(og, iqtree_dir).
+         * iqtree_results may be either:
+         *   tuple(bare_og_id, iqtree_dir), e.g. 1234
+         *   tuple(unit_id, iqtree_dir), e.g. og_1234 or og_351_subtree_001
+         *
+         * Before rooting, IDs are normalised to full unit_id prefixes matching
+         * the IQ-TREE filenames inside iqtree_dir.
          */
-        iqtree_tree_ch = iqtree_results.map { og, iqtree_dir ->
-            tuple(og, iqtree_dir)
-        }
+        iqtree_tree_ch = iqtree_results.map { id, iqtree_dir ->
+            def unit_id = id.toString().startsWith('og_') ? id.toString() : "og_${id}"
+            tuple(unit_id, iqtree_dir)
+        }    
 
         ROOT_GENE_TREE(
             iqtree_tree_ch,
