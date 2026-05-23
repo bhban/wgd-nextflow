@@ -667,10 +667,13 @@ workflow REDIPLOIDISATION {
          * Standard redip mode:
          * iqtree_results may be either:
          *   tuple(bare_og_id, iqtree_dir), e.g. 1234
-         *   tuple(unit_id, iqtree_dir), e.g. og_1234 or og_351_subtree_001
+         *   tuple(unit_id, iqtree_dir), e.g. og_1234, og_351_subtree_001,
+         *   or og_351_subtree_001_trimmed
          *
          * Before rooting, IDs are normalised to full unit_id prefixes matching
-         * the IQ-TREE filenames inside iqtree_dir.
+         * the IQ-TREE filenames inside iqtree_dir. From this point onward,
+         * the identifier is called unit_id, not og, because it may represent
+         * either an original OG or a treeclean-derived subtree/trimmed unit.
          */
         iqtree_tree_ch = iqtree_results.map { id, iqtree_dir ->
             def unit_id = id.toString().startsWith('og_') ? id.toString() : "og_${id}"
@@ -689,11 +692,11 @@ workflow REDIPLOIDISATION {
         rooting_summaries_emit_ch = ROOT_GENE_TREE.out.summaries
 
         rooted_trees_ch = ROOT_GENE_TREE.out.rooted_trees
-            .map { og, rooted_tree -> rooted_tree }
+            .map { unit_id, rooted_tree -> rooted_tree }
             .collect()
 
         rooting_summaries_ch = ROOT_GENE_TREE.out.summaries
-            .map { og, summary -> summary }
+            .map { unit_id, summary -> summary }
             .collect()
     }
 
