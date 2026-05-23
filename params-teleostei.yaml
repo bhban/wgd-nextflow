@@ -7,6 +7,7 @@ sif_paths:
   annevo: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/annevo_1.0.sif"
   gffutils: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/gffutils_1.0.sif"
   redip: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip_1.0.sif"
+  redip_ggtree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip-ggtree_1.0.sif"
 
 genomes_tsv: "/exports/eddie/scratch/s2428892/nf-teleostei/input/genomes.tsv"
 species_tree: "/exports/eddie/scratch/s2428892/nf-teleostei/input/species_tree.nwk"
