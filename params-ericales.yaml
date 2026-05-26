@@ -8,8 +8,8 @@ sif_paths:
   redip: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip_1.0.sif"
   treeclean: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/treeclean_1.0.sif"
 
-genomes_tsv: "/exports/eddie/scratch/s2428892/nf-ericales/input/genomes_Prim.tsv"
-species_tree: "/exports/eddie/scratch/s2428892/nf-ericales/input/species_tree_Prim.nwk"
+genomes_tsv: "/exports/eddie/scratch/s2428892/nf-ericales/input/genomes_Lecy.tsv"
+species_tree: "/exports/eddie/scratch/s2428892/nf-ericales/input/species_tree_Lecy.nwk"
 
 gff_dir: "/exports/eddie/scratch/s2428892/nf-ericales/input/gff"
 protein_dir: "/exports/eddie/scratch/s2428892/nf-ericales/input/protein"
@@ -40,3 +40,7 @@ treeclean_tip_label_format: "species_chr_gene"
 treeshrink_alpha: 0.005
 treeshrink_mode: "all-genes"
 treeshrink_protect_outgroups: true
+
+rediploidisation:
+  classify_mode: 'recurrent_lossy'
+  species_tree_branch_label_x_offset: 0.5
