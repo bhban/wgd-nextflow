@@ -6,6 +6,7 @@ sif_paths:
   annevo: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/annevo_1.0.sif"
   gffutils: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/gffutils_1.0.sif"
   redip: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip_1.0.sif"
+  redip_ggtree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip_1.0.sif"
   treeclean: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/treeclean_1.0.sif"
 
 genomes_tsv: "/exports/eddie/scratch/s2428892/nf-ericales/input/genomes_Lecy.tsv"
@@ -16,8 +17,7 @@ protein_dir: "/exports/eddie/scratch/s2428892/nf-ericales/input/protein"
 cds_dir: "/exports/eddie/scratch/s2428892/nf-ericales/input/cds"
 chr_dict_dir: "/exports/eddie/scratch/s2428892/nf-ericales/input/chr_dict"
 
-start_mode: "genespace"
-existing_genespace_wd: "/exports/eddie/scratch/s2428892/nf-ericales/results/workingDir/workingDir"
+start_mode: "full"
 
 run_rediploidisation: true
 run_tree_cleaning: true
