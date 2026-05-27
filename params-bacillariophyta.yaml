@@ -52,9 +52,9 @@ tandem_max_ord_gap: 2
 # AleRax disabled
 run_alerax: false
 
-# Rediploidisation enabled
-run_rediploidisation: true
+# Rediploidisation disabled
+run_rediploidisation: false
 
 # rediploidisation settings
-rediploidisation:
-  classify_mode: 'recurrent_lossy'
+#rediploidisation:
+#  classify_mode: 'recurrent_lossy'
