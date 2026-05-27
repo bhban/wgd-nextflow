@@ -9,8 +9,8 @@ sif_paths:
   redip_ggtree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip-ggtree_1.0.sif"
   treeclean: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/treeclean_1.0.sif"
 
-genomes_tsv: "/exports/eddie/scratch/s2428892/nf-ericales/input/genomes_Lecy.tsv"
-species_tree: "/exports/eddie/scratch/s2428892/nf-ericales/input/species_tree_Lecy.nwk"
+genomes_tsv: "/exports/eddie/scratch/s2428892/nf-ericales/input/genomes_Eben.tsv"
+species_tree: "/exports/eddie/scratch/s2428892/nf-ericales/input/species_tree_Eben.nwk"
 
 gff_dir: "/exports/eddie/scratch/s2428892/nf-ericales/input/gff"
 protein_dir: "/exports/eddie/scratch/s2428892/nf-ericales/input/protein"
