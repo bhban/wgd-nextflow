@@ -16,7 +16,7 @@ sif_paths:
 start_mode: full
 
 # Input metadata
-genomes_tsv: /exports/eddie/scratch/s2428892/nf-centrics/input/input/genomes.tsv
+genomes_tsv: /exports/eddie/scratch/s2428892/nf-centrics/input/genomes.tsv
 
 # Input directories
 gff_dir: /exports/eddie/scratch/s2428892/nf-centrics/input/gff
