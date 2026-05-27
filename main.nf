@@ -122,14 +122,14 @@ def makeIqtreeDirChannelFromDir(treeDir) {
     Channel
         .fromPath("${treeDir}/og_*/og_*_iqtree.treefile", checkIfExists: true)
         .map { treefile ->
-            def m = (treefile.baseName =~ /^og_(.+)_iqtree$/)
+            def m = (treefile.baseName =~ /^(og_.+)_iqtree$/)
             if (!m) {
                 throw new IllegalArgumentException("Could not parse OG from IQ-TREE filename: ${treefile}")
             }
 
             def og = m[0][1]
             def iqtree_dir = treefile.parent
-            def status_file = file("${iqtree_dir}/og_${og}.iqtree.status", checkIfExists: true)
+            def status_file = file("${iqtree_dir}/${og}_iqtree.status", checkIfExists: true)
 
             tuple(og, iqtree_dir, status_file)
         }
