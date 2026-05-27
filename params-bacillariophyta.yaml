@@ -9,19 +9,20 @@ sif_paths:
   annevo: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/annevo_1.0.sif"
   gffutils: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/gffutils_1.0.sif"
   redip: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip_1.0.sif"
+  redip_ggtree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip-ggtree_1.0.sif"
   treeclean: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/treeclean_1.0.sif"
   
 # Run mode
 start_mode: full
 
 # Input metadata
-genomes_tsv: input/genomes.tsv
+genomes_tsv: /exports/eddie/scratch/s2428892/nf-centrics/input/input/genomes.tsv
 
 # Input directories
-gff_dir: input/gff
-protein_dir: input/protein
-cds_dir: input/cds
-chr_dict_dir: input/chr_dict
+gff_dir: /exports/eddie/scratch/s2428892/nf-centrics/input/gff
+protein_dir: /exports/eddie/scratch/s2428892/nf-centrics/input/protein
+cds_dir: /exports/eddie/scratch/s2428892/nf-centrics/input/cds
+chr_dict_dir: /exports/eddie/scratch/s2428892/nf-centrics/input/chr_dict
 
 # File extensions
 ext:
@@ -41,7 +42,7 @@ species_tree: null
 use_species_tree_for_orthofinder: false
 use_species_tree_for_alerax: false
 
-# Broad diatom run with Triparma as outgroup
+# Triparma as outgroup
 require_outgroup_og: true
 
 # Optional post-processing
@@ -51,5 +52,9 @@ tandem_max_ord_gap: 2
 # AleRax disabled
 run_alerax: false
 
-# Rediploidisation disabled
-run_rediploidisation: false
+# Rediploidisation enabled
+run_rediploidisation: true
+
+# rediploidisation settings
+rediploidisation:
+  classify_mode: 'recurrent_lossy'
