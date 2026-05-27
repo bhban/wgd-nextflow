@@ -129,7 +129,20 @@ def makeIqtreeDirChannelFromDir(treeDir) {
 
             def og = m[0][1]
             def iqtree_dir = treefile.parent
-            def status_file = file("${iqtree_dir}/${og}_iqtree.status", checkIfExists: true)
+
+            def status_file_underscore = file("${iqtree_dir}/${og}_iqtree.status")
+            def status_file_dot = file("${iqtree_dir}/${og}.iqtree.status")
+
+            def status_file
+            if (status_file_underscore.exists()) {
+                status_file = status_file_underscore
+            } else if (status_file_dot.exists()) {
+                status_file = status_file_dot
+            } else {
+                throw new IllegalArgumentException(
+                    "Could not find IQ-TREE status file for ${og}. Tried: ${status_file_underscore} and ${status_file_dot}"
+                )
+            }
 
             tuple(og, iqtree_dir, status_file)
         }
