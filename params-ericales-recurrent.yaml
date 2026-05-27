@@ -9,14 +9,14 @@ sif_paths:
   redip_ggtree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip-ggtree_1.0.sif"
   treeclean: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/treeclean_1.0.sif"
 
-start_mode: redip_rooted
+start_mode: redip
 run_rediploidisation: true
 
-genomes_tsv: /exports/eddie/scratch/s2428892/nf-ericales/input/genomes_Prim.tsv
-species_tree: /exports/eddie/scratch/s2428892/nf-ericales/input/species_tree_Prim.nwk
+genomes_tsv: /exports/eddie/scratch/s2428892/nf-ericales/input/genomes_Lecy.tsv
+species_tree: /exports/eddie/scratch/s2428892/nf-ericales/input/species_tree_Lecy.nwk
 chr_dict_dir: /exports/eddie/scratch/s2428892/nf-ericales/input/chr_dict
 
 rediploidisation:
-  rooted_gene_trees_dir: /exports/eddie/scratch/s2428892/nf-ericales/results/rediploidisation/rooted_trees
-  genespace_wd: /exports/eddie/scratch/s2428892/nf-ericales/results/workingDir/workingDir
+  gene_trees_dir: /exports/eddie/scratch/s2428892/nf-ericales/results_Lecy_recurrent_lossy/final_trees
+  genespace_wd: /exports/eddie/scratch/s2428892/nf-ericales/results_Lecy_recurrent_lossy/workingDir
   classify_mode: 'recurrent_lossy'
