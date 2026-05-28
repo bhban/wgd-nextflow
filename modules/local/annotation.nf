@@ -28,7 +28,7 @@ process RUN_ANNEVO {
         --model_path "${params.annevo.model_path}" \\
         --output "${genome}.annevo.gff3" \\
         --threads ${task.cpus} \\
-        --tmp_path "\$PWD/annevo_tmp" \
+        --tmp_path "\$PWD/annevo_tmp" \\
         --num_classes 15 --boundary-aware --min_intron_length 20 \\
         ${batch} \\
         ${extra}
