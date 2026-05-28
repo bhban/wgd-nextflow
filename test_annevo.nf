@@ -112,4 +112,17 @@ workflow {
     annevo_fasta_out.view { genome, source, ploidy, gff, pep, chr, cds ->
         "ANNOTATION_TEST_OK\t${genome}\t${source}\t${ploidy}\t${gff}\t${pep}\t${cds}\t${chr}"
     }
+
+    publish:
+    annevo_test = annevo_fasta_out
+        .flatMap { genome, source, ploidy, gff, pep, chr, cds ->
+            [gff, pep, cds, chr]
+        }
+        .collect()
+}
+
+output {
+    annevo_test {
+        path '.'
+    }
 }
