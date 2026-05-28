@@ -7,30 +7,36 @@ import pandas as pd
 from ete3 import Tree
 
 
-def get_support_values(tree_file, tree_format):
-    tree = Tree(tree_file, format=tree_format)
+def parse_support(node):
+    """
+    Return branch support as a numeric value.
 
-    rows = []
+    Priority:
+    1. Use numeric internal node labels, e.g. )87:0.02
+    2. Use node.support only if it appears to be meaningful
+    3. Return None for missing support
+    """
 
-    for node in tree.traverse("postorder"):
-        if node.is_leaf():
-            continue
+    if node.name not in [None, ""]:
+        try:
+            return float(node.name)
+        except ValueError:
+            return None
 
-        support = node.support
+    if node.support is not None:
+        try:
+            support = float(node.support)
+        except ValueError:
+            return None
 
-        # ETE sometimes uses 1.0 as a default when support is absent.
-        # Keep it, but flag possible missing support separately.
-        descendant_tips = node.get_leaf_names()
+        # ETE commonly defaults missing support to 1.0.
+        # Treat this as missing unless there was an explicit node label.
+        if support == 1.0:
+            return None
 
-        rows.append({
-            "tree_file": os.path.basename(tree_file),
-            "node_name": node.name if node.name else "",
-            "support": support,
-            "n_descendant_tips": len(descendant_tips),
-            "descendant_tips": ",".join(descendant_tips)
-        })
+        return support
 
-    return rows
+    return None
 
 
 def main():
