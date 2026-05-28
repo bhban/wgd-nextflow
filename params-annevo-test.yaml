@@ -1,0 +1,57 @@
+# params-annevo-test.yaml
+
+# Genome table used by the test workflow.
+# Must contain at least:
+# genome_id    genome_source    ploidy
+genomes_tsv: "/exports/eddie/scratch/s2428892/nf-teleostei-annevo/input/genomes.tsv"
+
+
+# Directory containing genome FASTA files.
+# The test workflow expects files named like:
+# <genome_id>.<ext.fasta>
+#
+# For example:
+# Eric_Calluna_vul.fa
+# Eric_Calluna_vul.fa.gz
+# Eric_Calluna_vul.fasta
+# Eric_Calluna_vul.fasta.gz
+# Eric_Calluna_vul.fna
+# Eric_Calluna_vul.fna.gz
+fasta_dir: "/exports/eddie/scratch/s2428892/nf-teleostei-annevo/input/fasta"
+
+
+# Directory containing chromosome dictionary / chromosome length files.
+# The test workflow expects either:
+# <genome_id>.tsv
+# or
+# <genome_id>_chr_lengths.bed
+chr_dict_dir: "/exports/eddie/scratch/s2428892/nf-teleostei-annevo/input/chr_dict"
+
+
+# File extensions used by resolveGenomeFasta().
+# If your files are Eric_Calluna_vul.fa, use fasta: "fa".
+# If your files are Eric_Calluna_vul.fasta, use fasta: "fasta".
+# The test workflow will also try common alternatives like fasta.gz, fna, fna.gz.
+ext:
+  fasta: "fa"
+
+
+# ANNEVO settings used by RUN_ANNEVO.
+annevo:
+  # Path to the ANNEVO model used by /opt/ANNEVO/annotation.py
+  model_path: "/opt/ANNEVO/ANNEVO_model/ANNEVO_Vertebrate_other.pt"
+
+  # Set to null or remove if you do not want to pass --batch_size.
+  batch_size: 8
+
+  # Optional extra arguments passed directly to ANNEVO.
+  # Leave as an empty string if none are needed.
+  extra_args: ""
+
+  cleanup_tmp: true
+
+
+# Container paths.
+sif_paths:
+  annevo: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/annevo_1.0.sif"
+  gffutils: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/gffutils_1.0.sif"
