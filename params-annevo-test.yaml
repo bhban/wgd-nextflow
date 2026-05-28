@@ -3,7 +3,7 @@
 # Genome table used by the test workflow.
 # Must contain at least:
 # genome_id    genome_source    ploidy
-genomes_tsv: "/exports/eddie/scratch/s2428892/nf-teleostei-annevo/input/genomes.tsv"
+genomes_tsv: "/exports/eddie/scratch/s2428892/nf-teleostei-annevo/input/genomes_test.tsv"
 
 
 # Directory containing genome FASTA files.
