@@ -78,6 +78,7 @@ def readGenomesTable(tsvPath) {
 
 
 workflow {
+    main:
 
     genomes_rows = readGenomesTable(params.genomes_tsv)
 
