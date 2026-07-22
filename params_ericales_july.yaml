@@ -16,6 +16,9 @@ protein_dir: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/ericales/p
 cds_dir: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/ericales/cds_chromosome"
 chr_dict_dir: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/ericales/chr_dict"
 
+ext:
+  gff: "gff"
+
 start_mode: "full"
 
 run_rediploidisation: true
