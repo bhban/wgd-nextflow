@@ -18,6 +18,9 @@ chr_dict_dir: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/ericales/
 
 ext:
   gff: "gff"
+  pep: "pep"
+  cds: "cds"
+  fasta: "fa"
 
 start_mode: "full"
 
