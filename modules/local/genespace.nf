@@ -176,7 +176,10 @@ process RUN_GENESPACE {
     path("genespace.done")
 
     script:
-    def raw_of_arg = params.genespace.rawOrthofinderDir ? "--raw-orthofinder-dir ${params.genespace.rawOrthofinderDir}" : ""
+    def raw_of_arg = params.genespace.rawOrthofinderDir
+        ? "--raw-orthofinder-dir ${params.genespace.rawOrthofinderDir}"
+        : ""
+
     def stage_external_of = orthofinder_dir_arg ? """
     rm -rf ${genespace_wd}/orthofinder
     cp -r ${orthofinder_dir_arg} ${genespace_wd}/orthofinder
@@ -191,6 +194,7 @@ process RUN_GENESPACE {
       --genomes-tsv ${genomes_tsv} \
       --blk-size ${params.genespace.blkSize} \
       --orthofinder-in-blk ${params.genespace.orthofinder_in_blk} \
+      --only-og-anchors-second ${params.genespace.onlyOgAnchorsSecond} \
       > genespace.log 2>&1
 
     touch genespace.done
