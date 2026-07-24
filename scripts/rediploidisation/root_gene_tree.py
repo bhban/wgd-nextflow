@@ -176,8 +176,9 @@ def root_on_candidate_species(
     Try rooting on one outgroup tier.
 
     If one matching tip is present, root on that tip.
-    If multiple matching tips are present, root on their MRCA.
-    If their MRCA is already the whole tree, leave the tree unchanged.
+    If multiple matching tips are present, root on their MRCA only when every
+    descendant tip belongs to the candidate outgroup species. If the MRCA also
+    contains any other species, leave the tree unchanged.
     """
 
     candidate_leaves = [
@@ -204,6 +205,23 @@ def root_on_candidate_species(
         )
 
     mrca = tree.get_common_ancestor(candidate_leaves)
+
+    mrca_species = {
+        get_species(leaf.name, tip_separator)
+        for leaf in mrca.iter_leaves()
+    }
+    contaminating_species = sorted(mrca_species - candidate_species)
+
+    if contaminating_species:
+        return False, (
+            "outgroup_mrca_contains_non_outgroup_tips__tree_left_unchanged"
+            + "__n_outgroup_tips="
+            + str(n_candidate_tips)
+            + "__outgroup_species="
+            + ",".join(found_species)
+            + "__contaminating_species="
+            + ",".join(contaminating_species)
+        )
 
     if mrca is tree:
         return False, (
@@ -239,7 +257,9 @@ def root_on_tiered_outgroups(
       - Find the most basal tier that has at least one tip present in the tree.
       - Root on that tier only.
       - If one matching tip is present, root on that tip.
-      - If multiple matching tips are present, root on their MRCA.
+      - If multiple matching tips are present, root on their MRCA only if all
+        descendants belong to that outgroup tier.
+      - If the MRCA contains any other species, leave the tree unchanged.
       - If that MRCA is the whole tree, leave the tree unchanged and record this.
       - Only move to the next tier if no tips from the current tier are present.
     """
@@ -287,6 +307,28 @@ def root_on_tiered_outgroups(
             )
 
         mrca = tree.get_common_ancestor(candidate_leaves)
+
+        mrca_species = {
+            get_species(leaf.name, tip_separator)
+            for leaf in mrca.iter_leaves()
+        }
+        contaminating_species = sorted(mrca_species - candidate_species)
+
+        if contaminating_species:
+            return False, (
+                "tier="
+                + str(tier)
+                + "__defined_species="
+                + ",".join(sorted(candidate_species))
+                + "__outgroup_mrca_contains_non_outgroup_tips"
+                + "__tree_left_unchanged"
+                + "__n_outgroup_tips="
+                + str(n_candidate_tips)
+                + "__outgroup_species="
+                + ",".join(found_species)
+                + "__contaminating_species="
+                + ",".join(contaminating_species)
+            )
 
         if mrca is tree:
             return False, (
