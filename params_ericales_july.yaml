@@ -8,8 +8,8 @@ sif_paths:
   redip: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip_1.0.sif"
   redip_ggtree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip-ggtree_1.0.sif"
 
-genomes_tsv: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/ericales/genomes_primulaceae.tsv"
-species_tree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/ericales/species_tree_primulaceae.nwk"
+genomes_tsv: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/ericales/genomes_lecythidaceae.tsv"
+species_tree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/ericales/species_tree_lecythidaceae.nwk"
 
 gff_dir: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/ericales/gff_chromosome"
 protein_dir: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/ericales/proteins_chromosome"
@@ -29,6 +29,12 @@ run_tree_cleaning: false
 
 require_outgroup_og: true
 collapse_tandems: true
+
+genespace: 
+  rawOrthofinderDir: "" 
+  blkSize: 5 
+  orthofinder_in_blk: false 
+  onlyOgAnchorsSecond: true
 
 alignment_method: "macse_nt"
 
