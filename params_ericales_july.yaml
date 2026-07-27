@@ -24,16 +24,19 @@ ext:
 
 start_mode: "full"
 
+run_external_orthofinder: true
+use_species_tree_for_orthofinder: true
+
 run_rediploidisation: true
 run_tree_cleaning: false
 
 require_outgroup_og: true
 collapse_tandems: true
 
-genespace: 
-  rawOrthofinderDir: "" 
-  blkSize: 5 
-  orthofinder_in_blk: false 
+genespace:
+  rawOrthofinderDir: ""
+  blkSize: 5
+  orthofinder_in_blk: false
   onlyOgAnchorsSecond: true
 
 alignment_method: "macse_nt"
