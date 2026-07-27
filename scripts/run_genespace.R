@@ -10,7 +10,8 @@ option_list <- list(
   make_option("--genomes-tsv", type = "character"),
   make_option("--raw-orthofinder-dir", type = "character", default = ""),
   make_option("--blk-size", type = "integer"),
-  make_option("--orthofinder-in-blk", type = "character", default = "true")
+  make_option("--orthofinder-in-blk", type = "character", default = "true"),
+  make_option("--only-og-anchors-second", type = "character", default = "false")
 )
 
 opt <- parse_args(OptionParser(option_list = option_list))
@@ -21,13 +22,37 @@ need <- c(
   "blk-size"
 )
 
-missing <- need[vapply(need, function(x) is.null(opt[[x]]) || opt[[x]] == "", logical(1))]
+missing <- need[
+  vapply(
+    need,
+    function(x) is.null(opt[[x]]) || opt[[x]] == "",
+    logical(1)
+  )
+]
+
 if (length(missing) > 0) {
-  stop("Missing required option(s): ", paste0("--", missing, collapse = ", "))
+  stop(
+    "Missing required option(s): ",
+    paste0("--", missing, collapse = ", ")
+  )
 }
 
-as_bool <- function(x) {
-  tolower(trimws(as.character(x))) %in% c("1", "true", "yes", "y")
+as_bool <- function(x, option_name) {
+  value <- tolower(trimws(as.character(x)))
+
+  if (value %in% c("1", "true", "yes", "y")) {
+    return(TRUE)
+  }
+
+  if (value %in% c("0", "false", "no", "n")) {
+    return(FALSE)
+  }
+
+  stop(
+    option_name,
+    " must be true or false; received: ",
+    x
+  )
 }
 
 # ----------------------------
@@ -40,32 +65,48 @@ path2diamond <- Sys.which("diamond")
 if (path2mcscanx == "") {
   stop("MCScanX not found on PATH inside container")
 }
+
 if (path2orthofinder == "") {
   stop("orthofinder not found on PATH inside container")
 }
+
 if (path2diamond == "") {
   stop("diamond not found on PATH inside container")
 }
 
 # ----------------------------
-# Optional raw Orthofinder directory
+# Optional raw OrthoFinder directory
 # ----------------------------
 rawOrthofinderDir <- opt$`raw-orthofinder-dir`
 
 if (!is.null(rawOrthofinderDir) && rawOrthofinderDir != "") {
   if (!dir.exists(rawOrthofinderDir)) {
-    stop(paste0("--raw-orthofinder-dir does not exist: ", rawOrthofinderDir))
+    stop(
+      paste0(
+        "--raw-orthofinder-dir does not exist: ",
+        rawOrthofinderDir
+      )
+    )
   }
-  message("Using OrthoFinder results from --raw-orthofinder-dir: ", rawOrthofinderDir)
+
+  message(
+    "Using OrthoFinder results from --raw-orthofinder-dir: ",
+    rawOrthofinderDir
+  )
 } else {
   rawOrthofinderDir <- NULL
-  message("No --raw-orthofinder-dir provided; GENESPACE will look for orthofinder results in the working directory")
+
+  message(
+    "No --raw-orthofinder-dir provided; GENESPACE will look for ",
+    "OrthoFinder results in the working directory"
+  )
 }
 
 # ----------------------------
 # Genomes TSV
 # ----------------------------
 genomes_tsv <- opt$`genomes-tsv`
+
 if (!file.exists(genomes_tsv)) {
   stop(paste0("genomes.tsv not found: ", genomes_tsv))
 }
@@ -78,18 +119,41 @@ genomes_df <- read.delim(
   check.names = FALSE
 )
 
-need_cols <- c("genome_id", "genome_source", "ploidy")
-missing_cols <- setdiff(need_cols, colnames(genomes_df))
+need_cols <- c(
+  "genome_id",
+  "genome_source",
+  "ploidy"
+)
+
+missing_cols <- setdiff(
+  need_cols,
+  colnames(genomes_df)
+)
+
 if (length(missing_cols) > 0) {
-  stop("genomes.tsv missing required column(s): ", paste(missing_cols, collapse = ", "))
+  stop(
+    "genomes.tsv missing required column(s): ",
+    paste(missing_cols, collapse = ", ")
+  )
 }
 
-genomes_df$genome_source <- tolower(trimws(genomes_df$genome_source))
-genomes_df$ploidy <- suppressWarnings(as.integer(genomes_df$ploidy))
+genomes_df$genome_source <- tolower(
+  trimws(genomes_df$genome_source)
+)
+
+genomes_df$ploidy <- suppressWarnings(
+  as.integer(genomes_df$ploidy)
+)
 
 if (any(is.na(genomes_df$ploidy))) {
-  bad <- genomes_df$genome_id[is.na(genomes_df$ploidy)]
-  stop("Ploidy could not be parsed as integers for genome_id: ", paste(bad, collapse = ", "))
+  bad <- genomes_df$genome_id[
+    is.na(genomes_df$ploidy)
+  ]
+
+  stop(
+    "Ploidy could not be parsed as integers for genome_id: ",
+    paste(bad, collapse = ", ")
+  )
 }
 
 genomeIDs <- genomes_df$genome_id
@@ -100,14 +164,25 @@ names(ploidy) <- genomeIDs
 # Parameters
 # ----------------------------
 blkSize <- as.integer(opt$`blk-size`)
+
 if (is.na(blkSize)) {
   stop("--blk-size must be an integer")
 }
 
-orthofinderInBlk <- as_bool(opt$`orthofinder-in-blk`)
+orthofinderInBlk <- as_bool(
+  opt$`orthofinder-in-blk`,
+  "--orthofinder-in-blk"
+)
+
+onlyOgAnchorsSecond <- as_bool(
+  opt$`only-og-anchors-second`,
+  "--only-og-anchors-second"
+)
 
 message("Using wd = ", opt$`genespace-wd`)
 message("Using blkSize = ", blkSize)
+message("Using orthofinderInBlk = ", orthofinderInBlk)
+message("Using onlyOgAnchorsSecond = ", onlyOgAnchorsSecond)
 message("Using MCScanX = ", path2mcscanx)
 message("Using orthofinder = ", path2orthofinder)
 message("Using diamond = ", path2diamond)
@@ -115,6 +190,7 @@ message("Using diamond = ", path2diamond)
 gs_args <- list(
   wd = opt$`genespace-wd`,
   orthofinderInBlk = orthofinderInBlk,
+  onlyOgAnchorsSecond = onlyOgAnchorsSecond,
   genomeIDs = genomeIDs,
   ploidy = ploidy,
   blkSize = blkSize,
@@ -127,7 +203,14 @@ if (!is.null(rawOrthofinderDir) && rawOrthofinderDir != "") {
   gs_args$rawOrthofinderDir <- rawOrthofinderDir
 }
 
-gpar <- do.call(init_genespace, gs_args)
+gpar <- do.call(
+  init_genespace,
+  gs_args
+)
 
-out <- run_genespace(gpar, overwrite = TRUE)
+out <- run_genespace(
+  gpar,
+  overwrite = TRUE
+)
+
 cat("GENESPACE complete\n")
