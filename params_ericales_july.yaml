@@ -8,8 +8,8 @@ sif_paths:
   redip: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip_1.0.sif"
   redip_ggtree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/redip-ggtree_1.0.sif"
 
-genomes_tsv: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/ericales/genomes_lecythidaceae.tsv"
-species_tree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/ericales/species_tree_lecythidaceae.nwk"
+genomes_tsv: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/ericales/genomes_ebenaceae.tsv"
+species_tree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/ericales/species_tree_ebenaceae.nwk"
 
 gff_dir: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/ericales/gff_chromosome"
 protein_dir: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/ericales/proteins_chromosome"
