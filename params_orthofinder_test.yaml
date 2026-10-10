@@ -1,5 +1,5 @@
 # Existing OrthoFinder results
-existing_orthofinder_dir: "/exports/cmvm/datastore/eb/groups/macqueen_lab/Projects/WGDip_Research/Brianna/pipeline_output/teleostei/2026-09-10/workingDir/orthofinder/Results_Sep12"
+existing_orthofinder_dir: "/exports/eddie/scratch/s2428892/orthofinder_test/Results_Sep12"
 
 # Input data
 genomes_tsv: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/teleostei/genomes.tsv"
