@@ -1,0 +1,37 @@
+# Existing OrthoFinder results
+existing_orthofinder_dir: "/exports/cmvm/datastore/eb/groups/macqueen_lab/Projects/WGDip_Research/Brianna/pipeline_output/teleostei/2026-09-10/workingDir/orthofinder/Results_Sep12"
+
+# Input data
+genomes_tsv: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/teleostei/genomes.tsv"
+protein_dir: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/teleostei/proteins_chromosome"
+cds_dir: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/data/teleostei/cds_chromosome"
+
+ext:
+  pep: "pep"
+  cds: "cds"
+
+# Existing Apptainer containers
+sif_paths:
+  genespace: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/genespace_1.1.sif"
+  macse: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/macse_1.0.sif"
+  mafft: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/mafft_1.0.sif"
+  iqtree: "/exports/cmvm/eddie/eb/groups/macqueen_lab/brianna/containers/iqtree_1.0.sif"
+
+# OrthoFinder analysis
+run_orthofinder_trees: true
+orthofinder_trees_min_species: 4
+
+# Standalone test: five orthogroups
+test_og_count: 5
+
+# Alignment
+mafft_bin: "mafft"
+mafft_opts: "--auto --amino --anysymbol"
+
+# IQ-TREE
+iqtree_bin: "iqtree3"
+iqtree_nt_model: "GTR+G"
+iqtree_aa_model: "LG+G"
+
+# Published outputs
+test_output: "/exports/cmvm/datastore/eb/groups/macqueen_lab/Projects/WGDip_Research/Brianna/pipeline_output/teleostei/orthofinder_test"
