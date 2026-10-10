@@ -47,38 +47,24 @@ process ORTHOFINDER_MACSE_NT {
 
 process ORTHOFINDER_MAFFT_AA {
     tag { og }
-
     input:
     tuple val(og), path(fasta)
-
     output:
     tuple val(og), path('alignment_AA.fasta'), path('alignment.status')
-
     script:
     """
     mkdir -p tmp
-
     export TMPDIR="\$PWD/tmp"
     export TMP="\$TMPDIR"
     export TEMP="\$TMPDIR"
     export MAFFT_TMPDIR="\$TMPDIR"
-
-    export OMP_NUM_THREADS=${task.cpus}
-    export OPENBLAS_NUM_THREADS=${task.cpus}
-    export MKL_NUM_THREADS=${task.cpus}
-
-    ${params.mafft_bin} \
-        ${params.mafft_opts ?: ''} \
-        --thread ${task.cpus} \
-        ${fasta} \
-        > alignment_AA.fasta \
-        2> mafft.log
-
+    ${params.mafft_bin} ${params.mafft_opts ?: ''} --thread ${task.cpus} \
+       ${fasta} > alignment_AA.fasta 2> mafft.log
     test -s alignment_AA.fasta
-
     echo OK > alignment.status
     """
 }
+
 process ORTHOFINDER_IQTREE_NT {
     tag { og }
     input:
@@ -92,9 +78,9 @@ process ORTHOFINDER_IQTREE_NT {
     cd orthofinder_nt/${og}
     ${params.iqtree_bin} -s alignment_NT.fasta -st DNA \
        -m '${params.iqtree_nt_model ?: 'GTR+F+G4'}' -T ${task.cpus} \
-       -bb 1000 -wbtl -pre og_tree > iqtree.log 2>&1
-    test -s og_tree.treefile
-    test -s og_tree.ufboot
+       -bb 1000 -wbtl -pre ${og} > iqtree.log 2>&1
+    test -s ${og}.treefile
+    test -s ${og}.ufboot
     """
 }
 
@@ -111,8 +97,8 @@ process ORTHOFINDER_IQTREE_AA {
     cd orthofinder_aa/${og}
     ${params.iqtree_bin} -s alignment_AA.fasta -st AA \
        -m '${params.iqtree_aa_model ?: 'LG+G4'}' -T ${task.cpus} \
-       -bb 1000 -wbtl -pre og_tree > iqtree.log 2>&1
-    test -s og_tree.treefile
-    test -s og_tree.ufboot
+       -bb 1000 -wbtl -pre ${og} > iqtree.log 2>&1
+    test -s ${og}.treefile
+    test -s ${og}.ufboot
     """
 }
