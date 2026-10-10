@@ -7,6 +7,7 @@ include { PANGENES_PASS_FILTER; COLLAPSE_TANDEMS; WRITE_OG_FASTAS; MACSE_ALIGN_O
 include { ALERAX_WORKFLOW } from './modules/local/alerax'
 include { REDIPLOIDISATION } from './modules/local/rediploidisation'
 include { TREECLEAN } from './modules/local/treeclean'
+include { ORTHOFINDER_RAW_FASTAS; ORTHOFINDER_MACSE_NT; ORTHOFINDER_MAFFT_AA; ORTHOFINDER_IQTREE_NT; ORTHOFINDER_IQTREE_AA } from './modules/local/orthofinder_trees'
 
 
 // Helper functions
@@ -199,6 +200,15 @@ def makeOgFastaChannelFromDirChannel(dir_ch) {
     }
 }
 
+def makeOrthofinderFastaChannelFromDirChannel(dir_ch) {
+    dir_ch.flatMap { og_dir ->
+        og_dir.listFiles()
+            .findAll { it.name ==~ /OG[0-9]+\.fasta/ }
+            .sort { a, b -> a.name <=> b.name }
+            .collect { fasta -> tuple(fasta.baseName, fasta) }
+    }
+}
+
 def makeTreecleanNtAlignmentChannelFromDir(ntDir) {
     Channel
         .fromPath("${ntDir}/og_*_NT.fasta", checkIfExists: true)
@@ -246,6 +256,12 @@ workflow {
     genome_repo_publish_ch = Channel.empty()
     genespace_publish_ch = Channel.empty()
     post_outputs_ch = Channel.empty()
+    // Keep raw OrthoFinder trees entirely outside post_genespace.
+    orthofinder_aa_fastas_ch = Channel.empty()
+    orthofinder_cds_fastas_ch = Channel.empty()
+    orthofinder_report_ch = Channel.empty()
+    orthofinder_nt_trees_ch = Channel.empty()
+    orthofinder_aa_trees_ch = Channel.empty()
 
     def species_tree_path = params.species_tree?.toString()?.trim()
 
@@ -254,6 +270,12 @@ workflow {
 
     if (!allowed_alignment_methods.contains(alignment_method)) {
         error "Unsupported --alignment_method '${alignment_method}'. Use one of: ${allowed_alignment_methods.join(', ')}"
+    }
+
+    params.iqtree_nt_model = params.iqtree_nt_model ?: 'GTR+F+G4'
+    params.iqtree_aa_model = params.iqtree_aa_model ?: 'LG+G4'
+    if (!(params.iqtree_nt_model.toString().trim()) || !(params.iqtree_aa_model.toString().trim())) {
+        error 'IQ-TREE models cannot be empty'
     }
 
     def run_macse_nt_branch = alignment_method in ['macse_nt', 'both']
@@ -838,12 +860,22 @@ workflow {
             error "Unsupported start_mode: ${params.start_mode}. Use 'full', 'parsed', 'genespace', 'alerax', 'redip', 'redip_rooted', or 'treeclean'."
         }
 
+        if (params.run_orthofinder_trees && params.start_mode == 'genespace' && !params.existing_orthofinder_dir) {
+            error 'In genespace start mode, run_orthofinder_trees requires existing_orthofinder_dir'
+        }
+
+        def raw_orthofinder_dir_ch = null
+        if (params.run_orthofinder_trees && params.existing_orthofinder_dir) {
+            raw_orthofinder_dir_ch = Channel.value(file(params.existing_orthofinder_dir, checkIfExists: true))
+        }
+
         if (params.start_mode != 'genespace') {
             def orthofinder_dir_arg
             def orthofinder_out = null
 
             def use_external_orthofinder = (
                 params.run_external_orthofinder ||
+                (params.run_orthofinder_trees ?: false) ||
                 params.use_species_tree_for_orthofinder
             )
 
@@ -859,6 +891,9 @@ workflow {
                     orthofinder_species_tree_ch
                 )
                 orthofinder_dir_arg = orthofinder_out[0]
+                if (params.run_orthofinder_trees) {
+                    raw_orthofinder_dir_ch = orthofinder_out[0]
+                }
 
             } else {
                 orthofinder_dir_arg = ''
@@ -874,6 +909,33 @@ workflow {
         }
 
         genespace_publish_ch = genespace_ready_out[0]
+
+        // Independent, uncollapsed OrthoFinder analysis: NO GENESPACE synteny filtering.
+        // Run both molecule types irrespective of alignment_method.
+        if (params.run_orthofinder_trees) {
+            if (raw_orthofinder_dir_ch == null) {
+                error 'OrthoFinder results required for run_orthofinder_trees'
+            }
+            def raw_fastas = ORTHOFINDER_RAW_FASTAS(
+                raw_orthofinder_dir_ch,
+                genomes_tsv_ch,
+                cds_files_ch,
+                protein_files_ch,
+                Channel.value(file('scripts/write_orthofinder_og_fastas.py'))
+            )
+            orthofinder_aa_fastas_ch = raw_fastas[0]
+            orthofinder_cds_fastas_ch = raw_fastas[1]
+            orthofinder_report_ch = raw_fastas[2]
+            def raw_nt = makeOrthofinderFastaChannelFromDirChannel(raw_fastas[1])
+            def raw_aa = makeOrthofinderFastaChannelFromDirChannel(raw_fastas[0])
+            def raw_macse = ORTHOFINDER_MACSE_NT(raw_nt)
+            def raw_mafft = ORTHOFINDER_MAFFT_AA(raw_aa)
+            def raw_nt_trees = ORTHOFINDER_IQTREE_NT(raw_macse)
+            def raw_aa_trees = ORTHOFINDER_IQTREE_AA(raw_mafft)
+            // Explicit per-OG output paths prevent clobbering GENESPACE trees.
+            orthofinder_nt_trees_ch = raw_nt_trees.map { og, dir -> dir }.collect().flatMap { it }
+            orthofinder_aa_trees_ch = raw_aa_trees.map { og, dir -> dir }.collect().flatMap { it }
+        }
 
         pass_out = PANGENES_PASS_FILTER(
             genespace_ready_out[0],
@@ -1159,6 +1221,11 @@ workflow {
     genomeRepo = genome_repo_publish_ch
     genespace_wd = genespace_publish_ch
     post_genespace = post_outputs_ch
+    orthofinder_fasta_aa = orthofinder_aa_fastas_ch
+    orthofinder_fasta_cds = orthofinder_cds_fastas_ch
+    orthofinder_report = orthofinder_report_ch
+    orthofinder_iqtree_nt = orthofinder_nt_trees_ch
+    orthofinder_iqtree_aa = orthofinder_aa_trees_ch
 }
 
 output {
@@ -1172,5 +1239,22 @@ output {
 
     post_genespace {
         path '.'
+    }
+
+    // All five outputs are siblings under a single top-level directory.
+    orthofinder_fasta_aa {
+        path 'orthofinder_trees/fastas'
+    }
+    orthofinder_fasta_cds {
+        path 'orthofinder_trees/fastas'
+    }
+    orthofinder_report {
+        path 'orthofinder_trees/reports'
+    }
+    orthofinder_iqtree_nt {
+        path 'orthofinder_trees/iqtree_nt'
+    }
+    orthofinder_iqtree_aa {
+        path 'orthofinder_trees/iqtree_aa'
     }
 }
