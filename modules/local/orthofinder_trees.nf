@@ -47,19 +47,38 @@ process ORTHOFINDER_MACSE_NT {
 
 process ORTHOFINDER_MAFFT_AA {
     tag { og }
+
     input:
     tuple val(og), path(fasta)
+
     output:
     tuple val(og), path('alignment_AA.fasta'), path('alignment.status')
+
     script:
     """
-    ${params.mafft_bin} ${params.mafft_opts ?: ''} --thread ${task.cpus} \
-       ${fasta} > alignment_AA.fasta 2> mafft.log
+    mkdir -p tmp
+
+    export TMPDIR="\$PWD/tmp"
+    export TMP="\$TMPDIR"
+    export TEMP="\$TMPDIR"
+    export MAFFT_TMPDIR="\$TMPDIR"
+
+    export OMP_NUM_THREADS=${task.cpus}
+    export OPENBLAS_NUM_THREADS=${task.cpus}
+    export MKL_NUM_THREADS=${task.cpus}
+
+    ${params.mafft_bin} \
+        ${params.mafft_opts ?: ''} \
+        --thread ${task.cpus} \
+        ${fasta} \
+        > alignment_AA.fasta \
+        2> mafft.log
+
     test -s alignment_AA.fasta
+
     echo OK > alignment.status
     """
 }
-
 process ORTHOFINDER_IQTREE_NT {
     tag { og }
     input:
