@@ -200,12 +200,17 @@ def makeOgFastaChannelFromDirChannel(dir_ch) {
     }
 }
 
+// Native OrthoFinder IDs (OG0000000) are kept unchanged.
+// Also accept older og_OG0000000 FASTA names for compatibility.
 def makeOrthofinderFastaChannelFromDirChannel(dir_ch) {
     dir_ch.flatMap { og_dir ->
         og_dir.listFiles()
-            .findAll { it.name ==~ /OG[0-9]+\.fasta/ }
+            .findAll { it.name ==~ /(?:og_)?OG[0-9]+\.fasta/ }
             .sort { a, b -> a.name <=> b.name }
-            .collect { fasta -> tuple(fasta.baseName, fasta) }
+            .collect { fasta ->
+                def og = fasta.baseName.replaceFirst(/^og_/, '')
+                tuple(og, fasta)
+            }
     }
 }
 
@@ -277,6 +282,14 @@ workflow {
     if (!(params.iqtree_nt_model.toString().trim()) || !(params.iqtree_aa_model.toString().trim())) {
         error 'IQ-TREE models cannot be empty'
     }
+
+    // Raw OrthoFinder and GENESPACE alignment branches are independent.
+    def orthofinder_alignment_method = params.orthofinder_alignment_method?.toString()?.trim() ?: 'both'
+    if (!allowed_alignment_methods.contains(orthofinder_alignment_method)) {
+        error "Unsupported --orthofinder_alignment_method '${orthofinder_alignment_method}'. Use one of: ${allowed_alignment_methods.join(', ')}"
+    }
+    def run_orthofinder_nt_branch = orthofinder_alignment_method in ['macse_nt', 'both']
+    def run_orthofinder_aa_branch = orthofinder_alignment_method in ['mafft_aa', 'both']
 
     def run_macse_nt_branch = alignment_method in ['macse_nt', 'both']
     def run_mafft_aa_branch = alignment_method in ['mafft_aa', 'both']
@@ -911,7 +924,7 @@ workflow {
         genespace_publish_ch = genespace_ready_out[0]
 
         // Independent, uncollapsed OrthoFinder analysis: NO GENESPACE synteny filtering.
-        // Run both molecule types irrespective of alignment_method.
+        // Which molecule types run is controlled by orthofinder_alignment_method.
         if (params.run_orthofinder_trees) {
             if (raw_orthofinder_dir_ch == null) {
                 error 'OrthoFinder results required for run_orthofinder_trees'
@@ -926,15 +939,19 @@ workflow {
             orthofinder_aa_fastas_ch = raw_fastas[0]
             orthofinder_cds_fastas_ch = raw_fastas[1]
             orthofinder_report_ch = raw_fastas[2]
-            def raw_nt = makeOrthofinderFastaChannelFromDirChannel(raw_fastas[1])
-            def raw_aa = makeOrthofinderFastaChannelFromDirChannel(raw_fastas[0])
-            def raw_macse = ORTHOFINDER_MACSE_NT(raw_nt)
-            def raw_mafft = ORTHOFINDER_MAFFT_AA(raw_aa)
-            def raw_nt_trees = ORTHOFINDER_IQTREE_NT(raw_macse)
-            def raw_aa_trees = ORTHOFINDER_IQTREE_AA(raw_mafft)
             // Explicit per-OG output paths prevent clobbering GENESPACE trees.
-            orthofinder_nt_trees_ch = raw_nt_trees.map { og, dir -> dir }.collect().flatMap { it }
-            orthofinder_aa_trees_ch = raw_aa_trees.map { og, dir -> dir }.collect().flatMap { it }
+            if (run_orthofinder_nt_branch) {
+                def raw_nt = makeOrthofinderFastaChannelFromDirChannel(raw_fastas[1])
+                def raw_macse = ORTHOFINDER_MACSE_NT(raw_nt)
+                def raw_nt_trees = ORTHOFINDER_IQTREE_NT(raw_macse)
+                orthofinder_nt_trees_ch = raw_nt_trees.map { og, dir -> dir }.collect().flatMap { it }
+            }
+            if (run_orthofinder_aa_branch) {
+                def raw_aa = makeOrthofinderFastaChannelFromDirChannel(raw_fastas[0])
+                def raw_mafft = ORTHOFINDER_MAFFT_AA(raw_aa)
+                def raw_aa_trees = ORTHOFINDER_IQTREE_AA(raw_mafft)
+                orthofinder_aa_trees_ch = raw_aa_trees.map { og, dir -> dir }.collect().flatMap { it }
+            }
         }
 
         pass_out = PANGENES_PASS_FILTER(
