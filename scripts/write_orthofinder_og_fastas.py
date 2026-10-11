@@ -37,10 +37,22 @@ def index_fasta(path):
 
 
 def locate(directory, species, suffix):
-    matches = sorted(Path(directory).glob(f'{species}.{suffix}'))
-    if not matches:
-        raise FileNotFoundError(f'No {species}.{suffix} in {directory}')
-    return matches[0]
+    directory = Path(directory)
+
+    candidates = [
+        directory / f"{species}.final.{suffix}",
+        directory / f"{species}.tiberius.{suffix}",
+        directory / f"{species}.{suffix}",
+    ]
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+
+    raise FileNotFoundError(
+        f"No matching {suffix} FASTA for {species} in {directory}. "
+        f"Tried: {', '.join(p.name for p in candidates)}"
+    )
 
 
 def main():
