@@ -83,7 +83,7 @@ def make_karyotype(chr_bed: Path, out_karyotype: Path) -> list[str]:
             start = row[1].strip()
             end = row[2].strip()
 
-            if not re.fullmatch(r"chr[0-9]+", chrom):
+            if not re.fullmatch(r"chr[0-9]+", chrom, flags=re.IGNORECASE):
                 continue
 
             out.write(f"chr\t-\t{chrom}\t{chrom}\t{start}\t{end}\tblack\n")
@@ -121,12 +121,18 @@ def load_links(circos_tsv: Path) -> list[dict[str, str]]:
 
 
 def filter_main_chr_rows(rows: list[dict[str, str]], valid_chr: set[str]) -> list[dict[str, str]]:
+    valid_chr_lookup = {chrom.lower(): chrom for chrom in valid_chr}
     kept: list[dict[str, str]] = []
     for row in rows:
         chr1 = (row.get("chr1") or "").strip()
         chr2 = (row.get("chr2") or "").strip()
-        if chr1 in valid_chr and chr2 in valid_chr:
-            kept.append(row)
+        chr1_key = chr1.lower()
+        chr2_key = chr2.lower()
+        if chr1_key in valid_chr_lookup and chr2_key in valid_chr_lookup:
+            updated_row = row.copy()
+            updated_row["chr1"] = valid_chr_lookup[chr1_key]
+            updated_row["chr2"] = valid_chr_lookup[chr2_key]
+            kept.append(updated_row)
     return kept
 
 
