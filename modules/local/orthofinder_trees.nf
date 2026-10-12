@@ -1,3 +1,9 @@
+/*
+ * Raw OrthoFinder trees: all OG members, no synteny filtering or tandem collapse.
+ * Expected per-OG application failures become OK/FAIL statuses rather than
+ * failing the entire Nextflow run. Infrastructure/staging errors still fail.
+ */
+
 process ORTHOFINDER_RAW_FASTAS {
     tag 'orthofinder_raw_fastas'
     input:
@@ -15,8 +21,9 @@ process ORTHOFINDER_RAW_FASTAS {
     def proteinList = protein_files.collect { "\"${it}\"" }.join(' ')
     """
     mkdir -p input_cds input_protein
-    for f in ${cdsList}; do ln -s "\$(realpath \"\$f\")" input_cds/; done
-    for f in ${proteinList}; do ln -s "\$(realpath \"\$f\")" input_protein/; done
+    for f in ${cdsList}; do ln -s "\$(realpath "\$f")" input_cds/; done
+    for f in ${proteinList}; do ln -s "\$(realpath "\$f")" input_protein/; done
+    # Writer must recognise Species.final.pep as well as Species.pep.
     python ${writer} \
       --orthofinder-dir ${orthofinder_dir} \
       --genomes-tsv ${genomes_tsv} \
@@ -33,15 +40,35 @@ process ORTHOFINDER_MACSE_NT {
     tuple val(og), path(fasta)
     output:
     tuple val(og), path('alignment_NT.fasta'), path('alignment.status')
+    // Log and AA output are kept in this task's work directory, if generated.
     script:
     """
-    /opt/conda/envs/macse/bin/java -Xmx6g \
-       -jar /opt/conda/envs/macse/share/macse-2.07-0/macse_v2.07.jar \
-       -prog alignSequences -seq ${fasta} \
-       -out_AA alignment_AA.fasta -out_NT alignment_NT.fasta \
-       > macse.log 2>&1
-    test -s alignment_NT.fasta
-    echo OK > alignment.status
+    export OMP_NUM_THREADS=${task.cpus}
+    export OPENBLAS_NUM_THREADS=${task.cpus}
+    export MKL_NUM_THREADS=${task.cpus}
+    export VECLIB_MAXIMUM_THREADS=${task.cpus}
+    export NUMEXPR_NUM_THREADS=${task.cpus}
+    export MALLOC_ARENA_MAX=2
+
+    echo STARTED > alignment.status
+    set +e
+    /opt/conda/envs/macse/bin/java \
+      -XX:-UsePerfData -XX:ActiveProcessorCount=${task.cpus} -Xmx6g \
+      -jar /opt/conda/envs/macse/share/macse-2.07-0/macse_v2.07.jar \
+      -prog alignSequences -seq ${fasta} \
+      -out_AA alignment_AA.fasta -out_NT alignment_NT.fasta \
+      > macse.log 2>&1
+    rc=\$?
+    set -e
+
+    if [ "\$rc" -eq 0 ] && [ -s alignment_NT.fasta ] && [ -s alignment_AA.fasta ]; then
+      echo OK > alignment.status
+    else
+      printf 'MACSE failed or produced incomplete output (exit status %s)\\n' "\$rc" >> macse.log
+      rm -f alignment_NT.fasta alignment_AA.fasta
+      : > alignment_NT.fasta
+      echo FAIL > alignment.status
+    fi
     """
 }
 
@@ -58,10 +85,27 @@ process ORTHOFINDER_MAFFT_AA {
     export TMP="\$TMPDIR"
     export TEMP="\$TMPDIR"
     export MAFFT_TMPDIR="\$TMPDIR"
+    export OMP_NUM_THREADS=${task.cpus}
+    export OPENBLAS_NUM_THREADS=${task.cpus}
+    export MKL_NUM_THREADS=${task.cpus}
+    export VECLIB_MAXIMUM_THREADS=${task.cpus}
+    export NUMEXPR_NUM_THREADS=${task.cpus}
+    export MALLOC_ARENA_MAX=2
+
+    echo STARTED > alignment.status
+    set +e
     ${params.mafft_bin} ${params.mafft_opts ?: ''} --thread ${task.cpus} \
-       ${fasta} > alignment_AA.fasta 2> mafft.log
-    test -s alignment_AA.fasta
-    echo OK > alignment.status
+      ${fasta} > alignment_AA.fasta 2> mafft.log
+    rc=\$?
+    set -e
+
+    if [ "\$rc" -eq 0 ] && [ -s alignment_AA.fasta ]; then
+      echo OK > alignment.status
+    else
+      printf 'MAFFT failed or produced no alignment (exit status %s)\\n' "\$rc" >> mafft.log
+      : > alignment_AA.fasta
+      echo FAIL > alignment.status
+    fi
     """
 }
 
@@ -73,14 +117,51 @@ process ORTHOFINDER_IQTREE_NT {
     tuple val(og), path("orthofinder_nt/${og}")
     script:
     """
-    mkdir -p orthofinder_nt/${og}
-    cp ${aln} orthofinder_nt/${og}/alignment_NT.fasta
-    cd orthofinder_nt/${og}
-    ${params.iqtree_bin} -s alignment_NT.fasta -st DNA \
+    outdir="orthofinder_nt/${og}"
+    mkdir -p "\$outdir"
+    tree="\$outdir/${og}.treefile"
+    ufboot="\$outdir/${og}.ufboot"
+    logfile="\$outdir/iqtree.log"
+    tree_status="\$outdir/${og}.iqtree.status"
+    cp ${aln} "\$outdir/alignment_NT.fasta"
+    echo STARTED > "\$tree_status"
+
+    fail_tree() {
+      : > "\$tree"
+      : > "\$ufboot"
+      echo FAIL > "\$tree_status"
+    }
+
+    if [ ! -s "\$outdir/alignment_NT.fasta" ] || [ "\$(tr -d '\\r\\n' < ${status})" != OK ]; then
+      fail_tree
+      echo 'Skipped: missing NT alignment or upstream MACSE status not OK' > "\$logfile"
+      exit 0
+    fi
+
+    gap_fraction=\$(awk '
+      /^>/ {next}
+      { total += length(\$0); line=\$0; gaps += gsub(/[-XxNn?]/, "", line) }
+      END {if (total == 0) print 1; else print gaps / total}
+    ' "\$outdir/alignment_NT.fasta")
+    if awk -v gf="\$gap_fraction" 'BEGIN {exit !(gf > 0.50)}'; then
+      fail_tree
+      echo "Skipped: gap_fraction=\$gap_fraction (>0.50)" > "\$logfile"
+      exit 0
+    fi
+
+    set +e
+    ${params.iqtree_bin} -s "\$outdir/alignment_NT.fasta" -st DNA \
        -m '${params.iqtree_nt_model ?: 'GTR+F+G4'}' -T ${task.cpus} \
-       -bb 1000 -wbtl -pre ${og} > iqtree.log 2>&1
-    test -s ${og}.treefile
-    test -s ${og}.ufboot
+       -bb 1000 -wbtl -pre "\$outdir/${og}" \
+       > "\$logfile" 2>&1
+    rc=\$?
+    set -e
+    if [ "\$rc" -eq 0 ] && [ -s "\$tree" ] && [ -s "\$ufboot" ]; then
+      echo OK > "\$tree_status"
+    else
+      printf 'IQ-TREE failed or missing outputs (exit status %s)\\n' "\$rc" >> "\$logfile"
+      fail_tree
+    fi
     """
 }
 
@@ -92,13 +173,50 @@ process ORTHOFINDER_IQTREE_AA {
     tuple val(og), path("orthofinder_aa/${og}")
     script:
     """
-    mkdir -p orthofinder_aa/${og}
-    cp ${aln} orthofinder_aa/${og}/alignment_AA.fasta
-    cd orthofinder_aa/${og}
-    ${params.iqtree_bin} -s alignment_AA.fasta -st AA \
+    outdir="orthofinder_aa/${og}"
+    mkdir -p "\$outdir"
+    tree="\$outdir/${og}.treefile"
+    ufboot="\$outdir/${og}.ufboot"
+    logfile="\$outdir/iqtree.log"
+    tree_status="\$outdir/${og}.iqtree.status"
+    cp ${aln} "\$outdir/alignment_AA.fasta"
+    echo STARTED > "\$tree_status"
+
+    fail_tree() {
+      : > "\$tree"
+      : > "\$ufboot"
+      echo FAIL > "\$tree_status"
+    }
+
+    if [ ! -s "\$outdir/alignment_AA.fasta" ] || [ "\$(tr -d '\\r\\n' < ${status})" != OK ]; then
+      fail_tree
+      echo 'Skipped: missing AA alignment or upstream MAFFT status not OK' > "\$logfile"
+      exit 0
+    fi
+
+    gap_fraction=\$(awk '
+      /^>/ {next}
+      { total += length(\$0); line=\$0; gaps += gsub(/[-Xx?*]/, "", line) }
+      END {if (total == 0) print 1; else print gaps / total}
+    ' "\$outdir/alignment_AA.fasta")
+    if awk -v gf="\$gap_fraction" 'BEGIN {exit !(gf > 0.50)}'; then
+      fail_tree
+      echo "Skipped: gap_fraction=\$gap_fraction (>0.50)" > "\$logfile"
+      exit 0
+    fi
+
+    set +e
+    ${params.iqtree_bin} -s "\$outdir/alignment_AA.fasta" -st AA \
        -m '${params.iqtree_aa_model ?: 'LG+G4'}' -T ${task.cpus} \
-       -bb 1000 -wbtl -pre ${og} > iqtree.log 2>&1
-    test -s ${og}.treefile
-    test -s ${og}.ufboot
+       -bb 1000 -wbtl -pre "\$outdir/${og}" \
+       > "\$logfile" 2>&1
+    rc=\$?
+    set -e
+    if [ "\$rc" -eq 0 ] && [ -s "\$tree" ] && [ -s "\$ufboot" ]; then
+      echo OK > "\$tree_status"
+    else
+      printf 'IQ-TREE failed or missing outputs (exit status %s)\\n' "\$rc" >> "\$logfile"
+      fail_tree
+    fi
     """
 }
