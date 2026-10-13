@@ -161,8 +161,13 @@ process ORTHOFINDER_OR_SKIP {
     """
 }
 
+
 process RUN_GENESPACE {
     tag "genespace"
+
+    // Make a private copy of the parsed working directory.
+    // Prevent GENESPACE from modifying upstream cached inputs.
+    stageInMode 'copy'
 
     input:
     path genespace_wd
@@ -200,3 +205,4 @@ process RUN_GENESPACE {
     touch genespace.done
     """
 }
+
