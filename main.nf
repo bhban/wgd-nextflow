@@ -909,7 +909,7 @@ workflow {
                 }
 
             } else {
-                orthofinder_dir_arg = ''
+                orthofinder_dir_arg = []
             }
 
             genespace_ready_out = RUN_GENESPACE(
