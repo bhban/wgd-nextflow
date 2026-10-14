@@ -172,7 +172,7 @@ process RUN_GENESPACE {
     input:
     path genespace_wd
     path parse_ok
-    val orthofinder_dir_arg
+    path orthofinder_dir_arg
     path genomes_tsv
     path run_genespace_script
 
