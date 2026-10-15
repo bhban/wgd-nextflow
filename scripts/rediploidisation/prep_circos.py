@@ -65,36 +65,76 @@ def branch_sort_key(value: str) -> tuple[int, str]:
         return (1, value)
 
 
+
+def chromosome_sort_key(chrom: str):
+    """
+    Sort chromosomes naturally, grouping subgenomes.
+
+    Examples:
+      chr1, chr2, chr10
+      chrA1, chrA2, chrA10, chrB1, chrB2, chrB10
+    """
+    match = re.fullmatch(r"chr([A-Za-z]*)(\d+)", chrom, re.IGNORECASE)
+
+    if match:
+        subgenome = match.group(1).upper()
+        number = int(match.group(2))
+        return (0, subgenome, number, chrom)
+
+    parts = re.split(r"(\d+)", chrom)
+    natural = tuple(
+        (0, int(part)) if part.isdigit()
+        else (1, part.lower())
+        for part in parts
+    )
+    return (1, natural)
+
+
 def make_karyotype(chr_bed: Path, out_karyotype: Path) -> list[str]:
-    """Write a Circos karyotype for main chromosomes named chr<number>."""
-    chr_names: list[str] = []
+    """
+    Create a Circos karyotype from the chromosome-length BED.
+    Preserve original chromosome IDs and sort naturally.
+    """
+    chromosomes = {}
     out_karyotype.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(chr_bed, newline="") as handle, open(out_karyotype, "w", newline="") as out:
+    with open(chr_bed, newline="") as handle:
         reader = csv.reader(handle, delimiter="\t")
 
         for row in reader:
-            if not row or row[0].startswith("#"):
-                continue
-            if len(row) < 3:
+            if not row or row[0].startswith("#") or len(row) < 3:
                 continue
 
             chrom = row[0].strip()
-            start = row[1].strip()
-            end = row[2].strip()
 
-            if not re.fullmatch(r"chr[0-9]+", chrom, flags=re.IGNORECASE):
-                continue
+            try:
+                start = int(row[1])
+                end = int(row[2])
+            except ValueError:
+                raise ValueError(f"Invalid chromosome coordinates: {row}")
 
-            out.write(f"chr\t-\t{chrom}\t{chrom}\t{start}\t{end}\tblack\n")
-            chr_names.append(chrom)
+            if start < 0 or end <= start:
+                raise ValueError(f"Invalid chromosome interval: {row}")
 
-    if not chr_names:
-        raise ValueError(
-            f"No main chromosomes matching ^chr[0-9]+$ were found in {chr_bed}"
-        )
+            if chrom in chromosomes:
+                raise ValueError(f"Duplicate chromosome in BED: {chrom}")
+
+            chromosomes[chrom] = (start, end)
+
+    if not chromosomes:
+        raise ValueError(f"No valid chromosomes found in {chr_bed}")
+
+    chr_names = sorted(chromosomes, key=chromosome_sort_key)
+
+    with open(out_karyotype, "w") as out:
+        for chrom in chr_names:
+            start, end = chromosomes[chrom]
+            out.write(
+                f"chr\t-\t{chrom}\t{chrom}\t{start}\t{end}\tblack\n"
+            )
 
     return chr_names
+
 
 
 def load_links(circos_tsv: Path) -> list[dict[str, str]]:
